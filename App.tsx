@@ -30,6 +30,7 @@ import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage'; // New import
+import UpdatesPage from './pages/UpdatesPage'; // New import
 // Util imports
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './contexts/AuthContext';
@@ -251,6 +252,7 @@ const App = () => {
       <ReactRouterDOM.Route element={<MainLayout notifications={notifications} setNotifications={setNotifications} />}>
         <ReactRouterDOM.Route path="/" element={<ReactRouterDOM.Navigate replace to="/dashboard" />} />
         <ReactRouterDOM.Route path="/dashboard" element={<Dashboard projects={projects} rabData={rabData} bqData={bqData} />} />
+        <ReactRouterDOM.Route path="/updates" element={<UpdatesPage />} />
         <ReactRouterDOM.Route path="/notifications" element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} />} />
         <ReactRouterDOM.Route path="/profile" element={<ProfilePage />} />
         <ReactRouterDOM.Route path="/settings" element={<SettingsPage />} />
