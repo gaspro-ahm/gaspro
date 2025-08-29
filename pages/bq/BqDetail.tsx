@@ -1,4 +1,9 @@
 
+
+
+
+
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { type RabDocument, type RabDetailItem, type AhsComponent, type PriceDatabaseItem, type WorkItem } from '../../types';
@@ -98,9 +103,24 @@ interface BqDetailRowProps {
     onSaveRow: (id: string) => void;
     onMove: (index: number, direction: 'up' | 'down') => void;
     isLocked: boolean;
+    workItems: WorkItem[];
 }
 
-const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleDelete, onToggleEdit, onSaveRow, onMove, isLocked }: BqDetailRowProps) => {
+const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleDelete, onToggleEdit, onSaveRow, onMove, isLocked, workItems }: BqDetailRowProps) => {
+    const [suggestions, setSuggestions] = useState<WorkItem[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const suggestionBoxRef = useRef<HTMLTableDataCellElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const inputClasses = "w-full p-1 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-honda-red focus:border-transparent transition bg-white dark:bg-gray-700/50 text-gray-900 dark:text-gray-200 text-xs placeholder-gray-400";
     const viewClasses = "block px-1 py-1 text-xs";
     const isCategory = item.type === 'category';
@@ -126,6 +146,26 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
             e.preventDefault();
             e.currentTarget.blur(); // Trigger onBlur to calculate and update
         }
+    };
+
+    const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const value = e.target.value;
+        onUpdate(item.id, 'uraianPekerjaan', value);
+        if (value.length > 1) {
+            const filtered = workItems.filter(wi =>
+                wi.name.toLowerCase().includes(value.toLowerCase())
+            );
+            setSuggestions(filtered);
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
+        }
+    };
+
+    const handleSuggestionClick = (suggestion: WorkItem) => {
+        onUpdate(item.id, 'uraianPekerjaan', suggestion.name);
+        onUpdate(item.id, 'satuan', suggestion.unit);
+        setShowSuggestions(false);
     };
 
     const actionButtons = (
@@ -164,8 +204,36 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
     return (
         <tr className={rowClasses}>
             <td className="px-1 py-1 text-center align-top w-20">{moveButtons}</td>
-            <td className="px-2 py-1 align-top min-w-[300px]" style={indentPadding}>
-                {canEdit ? (<AutoResizeTextarea value={item.uraianPekerjaan} onChange={(e) => onUpdate(item.id, 'uraianPekerjaan', e.target.value)} className={`${inputClasses} text-left ${isCategory ? 'font-bold text-xs' : 'text-xs'}`} />) : (<span className={`${viewClasses} ${textClasses}`}>{item.uraianPekerjaan}</span>)}
+            <td className="px-2 py-1 align-top min-w-[300px] relative" style={indentPadding} ref={suggestionBoxRef}>
+                {canEdit ? (
+                    <>
+                        <AutoResizeTextarea
+                            value={item.uraianPekerjaan}
+                            onChange={handleDescriptionChange}
+                            onFocus={() => item.uraianPekerjaan.length > 1 && setShowSuggestions(true)}
+                            className={`${inputClasses} text-left ${isCategory ? 'font-bold text-xs' : 'text-xs'}`}
+                        />
+                        {showSuggestions && !isCategory && (
+                            <div className="absolute top-full left-0 w-full bg-card border border-border rounded-md shadow-lg z-20 max-h-60 overflow-y-auto mt-1">
+                                {suggestions.length > 0 ? (
+                                    suggestions.map(s => (
+                                        <div
+                                            key={s.id}
+                                            onClick={() => handleSuggestionClick(s)}
+                                            className="p-2 text-xs cursor-pointer hover:bg-muted"
+                                        >
+                                            {s.name} <span className="text-muted-foreground">({s.unit})</span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-2 text-xs text-muted-foreground">Tidak ada pekerjaan yang cocok.</div>
+                                )}
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <span className={`${viewClasses} ${textClasses}`}>{item.uraianPekerjaan}</span>
+                )}
             </td>
             <td className="px-2 py-1 align-top w-24">
                 {canEdit && !isCategory ? (<input type="text" value={item.satuan} onChange={(e) => onUpdate(item.id, 'satuan', e.target.value)} className={`${inputClasses} text-center`} />) : (<span className={`${viewClasses} text-center ${textClasses}`}>{isCategory ? '' : item.satuan}</span>)}
@@ -528,7 +596,28 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
             return doc.output('datauristring');
         }
     }, [bq, sourceItems, creatorName, approverName, workDuration, revisionText]);
-
+    
+    // FIX: Define handleExportPdf function to correctly handle PDF export.
+    const handleExportPdf = () => {
+        toast.promise(
+            new Promise<void>((resolve, reject) => {
+                setTimeout(() => {
+                    try {
+                        generatePdf('save');
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, 250);
+            }),
+            {
+                loading: 'Membuat PDF...',
+                success: 'PDF berhasil diunduh!',
+                error: 'Gagal membuat PDF.',
+            }
+        );
+        setIsFileActionsOpen(false);
+    };
 
     const handleSaveData = () => {
         if (!bq) return;
@@ -601,24 +690,52 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
         toast.success('Mode revisi aktif. Lakukan perubahan lalu klik Simpan.');
     };
 
-    const handleExportPdf = () => {
-        toast.promise(
-            new Promise<void>((resolve, reject) => {
-                setTimeout(() => {
-                    try {
-                        generatePdf('save');
-                        resolve();
-                    } catch (error) {
-                        reject(error);
-                    }
-                }, 250);
-            }),
-            {
-                loading: 'Membuat PDF...',
-                success: 'PDF berhasil diunduh!',
-                error: 'Gagal membuat PDF.',
-            }
-        );
+    const handleExportXlsx = () => {
+        if (!bq) return;
+        const toastId = toast.loading('Membuat file Excel...');
+    
+        try {
+            const header = ['No', 'Uraian Pekerjaan', 'Satuan', 'Volume', 'Keterangan'];
+            
+            const dataToExport = visibleItems.map(item => {
+                const indentedUraian = ' '.repeat((item.indent || 0) * 4) + item.uraianPekerjaan;
+    
+                if (item.type === 'category') {
+                    return [item.itemNumber || '', indentedUraian, '', '', item.keterangan || ''];
+                }
+                return [
+                    item.itemNumber || '',
+                    indentedUraian,
+                    item.satuan,
+                    item.volume,
+                    item.keterangan || ''
+                ];
+            });
+    
+            const ws = XLSX.utils.aoa_to_sheet([header, ...dataToExport]);
+    
+            // Set column widths
+            ws['!cols'] = [
+                { wch: 10 }, // No
+                { wch: 60 }, // Uraian Pekerjaan
+                { wch: 10 }, // Satuan
+                { wch: 15 }, // Volume
+                { wch: 40 }, // Keterangan
+            ];
+    
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "BQ");
+    
+            const filename = `BQ_${bq.eMPR}_${bq.projectName.replace(/\s/g, '_')}.xlsx`;
+            XLSX.writeFile(wb, filename);
+            
+            toast.success('File Excel berhasil diekspor!', { id: toastId });
+        } catch (error) {
+            console.error("Error exporting to XLSX:", error);
+            toast.error('Gagal mengekspor ke Excel.', { id: toastId });
+        } finally {
+            setIsFileActionsOpen(false);
+        }
     };
 
     const handleDownloadTemplate = () => {
@@ -911,7 +1028,12 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
                                             <Download size={14} /> Download Template
                                         </button>
                                         <button 
-                                            onClick={() => { handleExportPdf(); setIsFileActionsOpen(false); }} 
+                                            onClick={handleExportXlsx} 
+                                            className="w-full text-left flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
+                                            <FileDown size={14} /> Export ke Excel
+                                        </button>
+                                        <button 
+                                            onClick={handleExportPdf}
                                             className="w-full text-left flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
                                             <FileDown size={14} /> Export ke PDF
                                         </button>
@@ -947,6 +1069,7 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
                                         onSaveRow={handleSaveRow} 
                                         onMove={handleMoveRow} 
                                         isLocked={effectiveIsLocked}
+                                        workItems={workItems}
                                      />
                                  ))}
                             </tbody>

@@ -1,12 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { neon } from '@neondatabase/serverless';
 import { type Post } from '../types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
-
-// This connection string is provided by the user.
-// In a real-world production app, this should be handled via a secure backend API, not exposed client-side.
-const connectionString = 'postgresql://neondb_owner:npg_ZhCoMen1v9Rx@ep-twilight-pond-a1ybu7fd-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-const sql = neon(connectionString);
+import { sql } from '../services/db'; // Use the centralized db connection
 
 const UpdatesPage = () => {
     const [posts, setPosts] = useState<Post[]>([]);
@@ -18,12 +14,8 @@ const UpdatesPage = () => {
             try {
                 setLoading(true);
                 setError(null);
-                // The user provided this exact query example
-                // Fix: The `sql` function from neon does not accept generic type arguments.
-                // The result is cast to Post[] to satisfy TypeScript's type checking for setPosts.
-                // FIX: Corrected the `sql` function call to use tagged template literal syntax.
                 const result = await sql`SELECT id, title, content, author, created_at FROM posts ORDER BY created_at DESC`;
-                setPosts(result as Post[]);
+                setPosts(result as unknown as Post[]);
             } catch (err) {
                 console.error("Database fetch error:", err);
                 setError("Gagal memuat update dari database. Silakan coba lagi nanti.");

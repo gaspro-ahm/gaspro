@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+
+import React, { useState, useContext, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -29,176 +30,13 @@ import NotificationsPage from './pages/NotificationsPage';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ProfilePage from './pages/ProfilePage';
-import SettingsPage from './pages/SettingsPage'; // New import
-import UpdatesPage from './pages/UpdatesPage'; // New import
+import SettingsPage from './pages/SettingsPage';
 // Util imports
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './contexts/AuthContext';
 import { type RabDocument, type Project, type PriceDatabaseItem, type WorkItem } from './types';
-
-
-const initialRabData: RabDocument[] = [
-  { id: '1', eMPR: 'RAB001', projectName: 'Pembangunan Kantor Cabang Utama di Jakarta Selatan', pic: 'Andi', surveyDate: '2023-05-10', receivedDate: '2023-05-15', finishDate: '2024-01-10', status: 'Selesai', tenderValue: 1200000000, keterangan: 'Selesai lebih cepat dari jadwal.', sla: 0, pdfReady: true,
-    detailItems: [
-      { id: 'cat-1', type: 'category', uraianPekerjaan: 'PEKERJAAN PERSIAPAN', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true, itemNumber: 'I' },
-      { id: 'item-1', type: 'item', uraianPekerjaan: 'Pembersihan Lokasi dan Pematokan', volume: 1, satuan: 'Ls', hargaSatuan: 5000000, keterangan: '', isEditing: false, isSaved: true, ahs: [{id: 'ahs-1', componentName: 'Mandor', quantity: 1, unit: 'HOK', unitPrice: 200000, category: 'Jasa Pekerja', source: 'db'}], itemNumber: '1' },
-      { id: 'cat-2', type: 'category', uraianPekerjaan: 'PEKERJAAN STRUKTUR', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true, itemNumber: 'II' },
-      { id: 'item-2', type: 'item', uraianPekerjaan: 'Pekerjaan Pondasi Tiang Pancang', volume: 100, satuan: 'm3', hargaSatuan: 1200000, keterangan: 'Beton K-225', isEditing: false, isSaved: true, ahs: [], itemNumber: '1' },
-      { id: 'item-3', type: 'item', uraianPekerjaan: 'Pekerjaan Struktur Beton Bertulang', volume: 150, satuan: 'm3', hargaSatuan: 4500000, keterangan: 'Beton K-300', isEditing: false, isSaved: true, ahs: [], itemNumber: '2' },
-  ] },
-  { id: '2', eMPR: 'RAB002', projectName: 'Pengembangan Website E-commerce untuk Klien A', pic: 'Budi', surveyDate: '2023-06-21', receivedDate: '2023-06-25', finishDate: '2023-09-21', status: 'Selesai', tenderValue: 72500000, keterangan: 'Ada tambahan fitur minor.', sla: 0, pdfReady: true, detailItems: [] },
-  { id: '3', eMPR: 'RAB003', projectName: 'Aplikasi Mobile Internal untuk Manajemen SDM', pic: 'Citra', surveyDate: '2023-07-02', receivedDate: null, finishDate: null, status: 'Survey', tenderValue: null, keterangan: 'Menunggu approval direksi.', sla: 0, pdfReady: false, detailItems: [] },
-  { id: '4', eMPR: 'RAB004', projectName: 'Proyek Renovasi dan Perbaikan Gedung Utama', pic: 'Andi', surveyDate: '2023-07-15', receivedDate: null, finishDate: null, status: 'Ditolak', tenderValue: null, keterangan: 'Anggaran melebihi budget kuartal ini.', sla: 0, pdfReady: false, detailItems: [] },
-  { id: '5', eMPR: 'RAB005', projectName: 'Implementasi Sistem ERP Gudang Terpusat', pic: 'Doni', surveyDate: '2023-08-01', receivedDate: '2023-08-10', finishDate: null, status: 'Diterima', tenderValue: 345000000, keterangan: 'Fase 1 sedang berjalan.', sla: 0, pdfReady: false, detailItems: [] },
-];
-
-// I'll create a separate initial data for BQ, just changing the eMPR for now.
-const initialBqData: RabDocument[] = JSON.parse(JSON.stringify(initialRabData)).map((item: RabDocument) => ({...item, eMPR: item.eMPR.replace('RAB', 'BQ')}));
-
-const initialProjects: Project[] = [
-    { 
-        id: 'PROJ001', name: 'Website E-commerce Klien A', team: ['Andi', 'Budi', 'Citra'], status: 'In Progress', dueDate: '2024-09-30', progress: 75,
-        group: 'Pengembangan IT',
-        description: 'Proyek ini bertujuan untuk mengembangkan platform e-commerce B2C yang modern dan responsif untuk Klien A. Fitur utama termasuk manajemen produk, keranjang belanja, integrasi pembayaran, dan dasbor admin.',
-        phases: [
-            { id: 'phase-1', name: 'Feasibility', plan: { start: '2024-01-20', end: '2024-03-20' }, actual: { start: '2024-01-22', end: '2024-03-25' }, color: '#3b82f6' },
-            { id: 'phase-2', name: 'Planning & Design', plan: { start: '2024-03-20', end: '2024-10-15' }, actual: { start: '2024-03-25', end: '2024-10-20' }, color: '#14b8a6' },
-            { id: 'phase-3', name: 'Construction', plan: { start: '2024-10-15', end: '2025-12-20' }, actual: { start: '2024-10-20', end: null }, color: '#f97316' },
-            { id: 'phase-4', name: 'Close Out', plan: { start: '2025-12-20', end: '2026-03-01' }, actual: { start: null, end: null }, color: '#ef4444' }
-        ]
-    },
-    { id: 'PROJ002', name: 'Aplikasi Mobile Internal', team: ['Doni', 'Eka'], status: 'In Progress', dueDate: '2024-10-15', progress: 40, group: 'Pengembangan IT', phases: [] },
-    { id: 'PROJ003', name: 'Migrasi Sistem Gudang', team: ['Fira', 'Gani', 'Hari'], status: 'Completed', dueDate: '2024-07-20', progress: 100, group: 'Infrastruktur', phases: [], finishDate: '2024-07-18' },
-    { id: 'PROJ004', name: 'Pembangunan Kantor Cabang', team: ['Indra', 'Joko'], status: 'Not Started', dueDate: '2025-01-20', progress: 0, group: 'Konstruksi', phases: [] },
-    { id: 'PROJ005', name: 'Desain Ulang UI/UX', team: ['Kiki', 'Lina'], status: 'In Progress', dueDate: '2024-08-25', progress: 90, group: 'Pengembangan IT', phases: [] },
-    { id: 'PROJ006', name: 'Riset Pasar Produk Baru', team: ['Mega'], status: 'Completed', dueDate: '2024-06-10', progress: 100, group: 'Riset', phases: [], finishDate: '2024-06-12' },
-];
-
-const initialPriceDatabase: PriceDatabaseItem[] = [
-  { id: 'mat-1', category: 'Material', itemName: 'Semen Portland (50kg)', unit: 'sak', unitPrice: 65000, priceSource: 'Toko Bangunan A', lastUpdated: '2024-07-01T10:00:00Z' },
-  { id: 'mat-2', category: 'Material', itemName: 'Pasir Urug', unit: 'm3', unitPrice: 250000, priceSource: 'Supplier B', lastUpdated: '2024-07-05T11:00:00Z' },
-  { id: 'mat-3', category: 'Material', itemName: 'Besi Beton Polos 10mm', unit: 'btg', unitPrice: 75000, priceSource: 'Pabrik C', lastUpdated: '2024-06-28T09:00:00Z' },
-  { id: 'mat-4', category: 'Material', itemName: 'Cat Tembok Interior (5kg)', unit: 'pail', unitPrice: 125000, lastUpdated: '2024-07-10T09:00:00Z' },
-  { id: 'jasa-1', category: 'Jasa Pekerja', itemName: 'Tukang Batu', unit: 'HOK', unitPrice: 150000, lastUpdated: '2024-07-01T10:00:00Z' },
-  { id: 'jasa-2', category: 'Jasa Pekerja', itemName: 'Kernet / Helper', unit: 'HOK', unitPrice: 120000, lastUpdated: '2024-07-01T10:00:00Z' },
-  { id: 'jasa-3', category: 'Jasa Pekerja', itemName: 'Mandor', unit: 'HOK', unitPrice: 200000, priceSource: 'Internal', lastUpdated: '2024-07-01T10:00:00Z' },
-  { id: 'alat-1', category: 'Alat Bantu', itemName: 'Sewa Molen Beton', unit: 'hari', unitPrice: 300000, priceSource: 'Rental D', lastUpdated: '2024-06-15T14:00:00Z' },
-];
-
-const seenWorkItems = new Set<string>();
-const initialWorkItems: WorkItem[] = [];
-initialRabData.forEach(rab => {
-    rab.detailItems.forEach(item => {
-        if (item.type === 'item' && item.uraianPekerjaan && !seenWorkItems.has(item.uraianPekerjaan.toLowerCase())) {
-            seenWorkItems.add(item.uraianPekerjaan.toLowerCase());
-            initialWorkItems.push({
-                id: `wi-${initialWorkItems.length + 1}`,
-                name: item.uraianPekerjaan,
-                category: 'Sipil', // Default category
-                unit: item.satuan,
-                defaultPrice: item.hargaSatuan,
-                source: item.ahs && item.ahs.length > 0 ? 'AHS' : 'Manual',
-                lastUpdated: new Date().toISOString(),
-                defaultAhs: item.ahs || []
-            });
-        }
-    });
-});
-
-// Add new preparation work items
-const newPreparationItems: Omit<WorkItem, 'id'>[] = [
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, dokumentasi projek (2 rangkap), mobilisasi dan demobilisasi dari lokasi barang/alat ke site 0 - kurang dari 20 km (SUNTER & PEGANGSAAN) (1 s.d 14 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 3408600,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, dokumentasi projek (2 rangkap), mobilisasi dan demobilisasi dari lokasi barang/alat ke site 0 - kurang dari 20 km (SUNTER & PEGANGSAAN) (15 s.d 30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 5118600,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, dokumentasi projek (2 rangkap), mobilisasi dan demobilisasi dari lokasi barang/alat ke site 0 - kurang dari 20 km (SUNTER & PEGANGSAAN) (>30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 9108600,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, proteksi area kerja, dokumentasi projek 2 rangkap, mobilisasi dan demobilisasi dari lokasi barang/alat ke site 20 - kurang dari 40 km (CIKARANG & DELTAMAS) (1 s.d 14 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 3796200,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, proteksi area kerja, dokumentasi projek 2 rangkap, mobilisasi dan demobilisasi dari lokasi barang/alat ke site 20 - kurang dari 40 km (CIKARANG & DELTAMAS) (15 s.d 30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 5506200,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, proteksi area kerja, dokumentasi projek 2 rangkap, mobilisasi dan demobilisasi dari lokasi barang/alat ke site 20 - kurang dari 40 km (CIKARANG & DELTAMAS) (>30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 9496200,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, proteksi area kerja, dokumentasi projek 2 rangkap, mobilisasi dan demobilisasi dari lokasi barang/alat ke site 40 - kurang dari 80 km (KARAWANG) (1 s.d 14 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 7136400,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, proteksi area kerja, dokumentasi projek 2 rangkap, mobilisasi dan demobilisasi dari lokasi barang/alat ke site 40 - kurang dari 80 km (KARAWANG) (15 s.d 30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 8846400,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-    {
-        name: 'Persiapan, pengukuran & persiapan alat kerja, penggunaan APD & seragam kerja, pembuangan puing keluar AHM, pembersihan area kerja setiap hari, dokumentasi projek (2 rangkap), mobilisasi dan demobilisasi dari lokasi barang/alat ke site 0 - kurang dari 20 km (KARAWANG) (>30 HK)',
-        category: 'Persiapan',
-        unit: 'set',
-        defaultPrice: 12836400,
-        source: 'Manual',
-        lastUpdated: new Date().toISOString(),
-        defaultAhs: []
-    },
-];
-
-newPreparationItems.forEach(item => {
-    if (!seenWorkItems.has(item.name.toLowerCase())) {
-        seenWorkItems.add(item.name.toLowerCase());
-        initialWorkItems.push({
-            ...item,
-            id: `wi-${initialWorkItems.length + 1}`,
-        });
-    }
-});
+import { initializeDatabase, fetchData, initialData } from './services/db';
+import { Loader2 } from 'lucide-react';
 
 
 const MainLayout = ({ notifications, setNotifications }: { notifications: any[], setNotifications: React.Dispatch<React.SetStateAction<any[]>> }) => {
@@ -224,13 +62,14 @@ const MainLayout = ({ notifications, setNotifications }: { notifications: any[],
 
 
 const App = () => {
-  const [rabData, setRabData] = useState<RabDocument[]>(initialRabData);
-  const [bqData, setBqData] = useState<RabDocument[]>(initialBqData); // New state for BQ
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [priceDatabase, setPriceDatabase] = useState<PriceDatabaseItem[]>(initialPriceDatabase);
-  const [workItems, setWorkItems] = useState<WorkItem[]>(initialWorkItems);
-  const [priceCategories, setPriceCategories] = useState<string[]>(['Material', 'Alat Bantu', 'Jasa Pekerja']);
-  const [workCategories, setWorkCategories] = useState<string[]>(['Persiapan', 'Sipil', 'Arsitektur', 'MEP', 'Interior', 'Lainnya']);
+  const [rabData, setRabData] = useState<RabDocument[]>([]);
+  const [bqData, setBqData] = useState<RabDocument[]>([]); 
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [priceDatabase, setPriceDatabase] = useState<PriceDatabaseItem[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItem[]>([]);
+  const [priceCategories, setPriceCategories] = useState<string[]>([]);
+  const [workCategories, setWorkCategories] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [notifications, setNotifications] = useState([
     { id: 1, text: 'Status RAB #RAB005 diperbarui menjadi Diterima.', time: '5 menit lalu', read: false, icon: 'CheckCircle', link: '/rab/detail/5' },
@@ -240,8 +79,42 @@ const App = () => {
     { id: 5, text: 'Database harga material berhasil diimpor.', time: '3 hari lalu', read: true, icon: 'CheckCircle', link: '/rab/database'},
     { id: 6, text: 'Tugas baru ditambahkan ke Proyek "Migrasi Sistem Gudang".', time: '3 hari lalu', read: true, icon: 'MessageSquare', link: '/project/detail/PROJ003'},
   ]);
+  
+  const fetchAllData = async () => {
+    const data = await fetchData();
+    setProjects(data.projects);
+    setRabData(data.rabData);
+    setBqData(data.bqData);
+    setPriceDatabase(data.priceDatabase);
+    setWorkItems(data.workItems);
+    setPriceCategories(data.priceCategories);
+    setWorkCategories(data.workCategories);
+  };
 
-  const initialDataForAdmin = { initialProjects, initialRabData, initialBqData, initialPriceDatabase, initialWorkItems };
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true);
+      await initializeDatabase();
+      await fetchAllData();
+      setIsLoading(false);
+    };
+    init();
+
+    const pollInterval = setInterval(fetchAllData, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="animate-spin text-primary" size={48} />
+          <p className="text-lg font-semibold">Memuat data dari database...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ReactRouterDOM.Routes>
@@ -252,7 +125,6 @@ const App = () => {
       <ReactRouterDOM.Route element={<MainLayout notifications={notifications} setNotifications={setNotifications} />}>
         <ReactRouterDOM.Route path="/" element={<ReactRouterDOM.Navigate replace to="/dashboard" />} />
         <ReactRouterDOM.Route path="/dashboard" element={<Dashboard projects={projects} rabData={rabData} bqData={bqData} />} />
-        <ReactRouterDOM.Route path="/updates" element={<UpdatesPage />} />
         <ReactRouterDOM.Route path="/notifications" element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} />} />
         <ReactRouterDOM.Route path="/profile" element={<ProfilePage />} />
         <ReactRouterDOM.Route path="/settings" element={<SettingsPage />} />
@@ -302,7 +174,7 @@ const App = () => {
                 setBqData={setBqData}
                 setPriceDatabase={setPriceDatabase}
                 setWorkItems={setWorkItems}
-                initialData={initialDataForAdmin}
+                initialData={initialData}
               />
             </ProtectedRoute>
           }

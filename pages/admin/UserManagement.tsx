@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 import React, { useState, useMemo, useContext } from 'react';
 import { Search, Plus, MoreVertical, Trash2, Edit } from 'lucide-react';
 import { type User } from '../../types';
@@ -14,6 +8,7 @@ import { LogContext } from '../../contexts/LogContext';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import UserModal from '../../components/UserModal';
 import toast from 'react-hot-toast';
+import { createUser, updateUser, deleteUser } from '../../services/db';
 
 interface RoleBadgeProps {
   role: User['role'];
@@ -58,20 +53,30 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveUser = (data: Omit<User, 'id' | 'lastLogin'> & { id?: string }) => {
-    if (data.id) { // Update
-      setUsers(prev => prev.map(u => (u.id === data.id ? { ...u, ...data } : u)));
-      addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_UPDATED', details: `User '${data.name}' (ID: ${data.id}) was updated.` });
-      toast.success('Pengguna berhasil diperbarui.');
-    } else { // Create
-      const newUser: User = {
-        ...data,
-        id: `usr-${Date.now()}`,
-        lastLogin: new Date().toISOString(),
-      };
-      setUsers(prev => [...prev, newUser]);
-      addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_CREATED', details: `New user '${data.name}' was created.` });
-      toast.success('Pengguna baru berhasil ditambahkan.');
+  const handleSaveUser = async (data: Omit<User, 'id' | 'lastLogin'> & { id?: string }) => {
+    try {
+        if (data.id) { // Update
+            const success = await updateUser(data.id, data);
+            if(success) {
+                setUsers(prev => prev.map(u => (u.id === data.id ? { ...u, ...data } : u)));
+                addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_UPDATED', details: `User '${data.name}' (ID: ${data.id}) was updated.` });
+                toast.success('Pengguna berhasil diperbarui.');
+            } else {
+                 toast.error('Gagal memperbarui pengguna.');
+            }
+        } else { // Create
+            const newUser = await createUser(data);
+            if(newUser) {
+                setUsers(prev => [...prev, newUser]);
+                addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_CREATED', details: `New user '${data.name}' was created.` });
+                toast.success('Pengguna baru berhasil ditambahkan.');
+            } else {
+                 toast.error('Gagal membuat pengguna baru.');
+            }
+        }
+    } catch (error) {
+        toast.error('Terjadi kesalahan pada database.');
+        console.error(error);
     }
     setIsModalOpen(false);
   };
@@ -81,14 +86,19 @@ const UserManagement = () => {
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (userToDelete) {
       const user = users.find(u => u.id === userToDelete);
-      setUsers(prev => prev.filter(u => u.id !== userToDelete));
-      if (user) {
-          addLog({ level: 'WARNING', user: currentUser!.name, action: 'USER_DELETED', details: `User '${user.name}' (ID: ${userToDelete}) was deleted.` });
+      const success = await deleteUser(userToDelete);
+      if (success) {
+        setUsers(prev => prev.filter(u => u.id !== userToDelete));
+        if (user) {
+            addLog({ level: 'WARNING', user: currentUser!.name, action: 'USER_DELETED', details: `User '${user.name}' (ID: ${userToDelete}) was deleted.` });
+        }
+        toast.success('Pengguna berhasil dihapus.');
+      } else {
+        toast.error('Gagal menghapus pengguna.');
       }
-      toast.success('Pengguna berhasil dihapus.');
     }
     setIsConfirmOpen(false);
     setUserToDelete(null);
@@ -118,10 +128,10 @@ const UserManagement = () => {
               placeholder="Cari pengguna..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-honda-red focus:border-transparent transition bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
             />
           </div>
-          <button onClick={handleOpenCreateModal} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-honda-red rounded-lg hover:bg-red-700 transition shadow">
+          <button onClick={handleOpenCreateModal} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition shadow">
             <Plus size={16} /> Tambah Pengguna Baru
           </button>
         </div>

@@ -346,6 +346,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
     const { rabId } = useParams<{ rabId: string }>();
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const bqFileInputRef = useRef<HTMLInputElement>(null);
     const fileActionsMenuRef = useRef<HTMLDivElement>(null);
 
     const [rab, setRab] = useState<RabDocument | null>(null);
@@ -373,6 +374,11 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
 
     // State for file actions dropdown
     const [isFileActionsOpen, setIsFileActionsOpen] = useState(false);
+
+    // State for BQ import confirmation
+    const [isImportConfirmOpen, setIsImportConfirmOpen] = useState(false);
+    const [importedItems, setImportedItems] = useState<RabDetailItem[] | null>(null);
+
 
     const isReadOnlyView = viewingRevisionIndex !== 'current';
     const effectiveIsLocked = useMemo(() => rab?.isLocked || isReadOnlyView, [rab?.isLocked, isReadOnlyView]);
@@ -747,7 +753,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
         }
     };
     
-    // --- Export & Save Functions ---
+    // --- Export, Import & Save Functions ---
 
     const generatePdf = useCallback((outputType: 'save' | 'datauristring' = 'save') => {
         if (!rab) return null;
@@ -1124,6 +1130,79 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
         reader.readAsBinaryString(file);
     };
 
+    const handleBqUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+
+                const header = rows[0].map(h => h.toString().trim());
+                const colMap: Record<string, number> = {};
+                header.forEach((h, i) => { colMap[h] = i; });
+
+                if (!('Uraian Pekerjaan' in colMap && 'Satuan' in colMap && 'Volume' in colMap)) {
+                    toast.error("Format file tidak sesuai. Pastikan kolom 'Uraian Pekerjaan', 'Satuan', dan 'Volume' ada.");
+                    return;
+                }
+
+                const parsedItems: RabDetailItem[] = rows.slice(1).map((row, index) => {
+                    const uraianRaw = row[colMap['Uraian Pekerjaan']]?.toString() || '';
+                    const indent = (uraianRaw.match(/^ */)?.[0].length || 0) / 4;
+                    const uraianPekerjaan = uraianRaw.trim();
+                    const itemNumber = row[colMap['No']]?.toString() || '';
+                    const isCategory = /^[IVXLCDM]+$/i.test(itemNumber) || (!row[colMap['Satuan']] && !row[colMap['Volume']]);
+                    // FIX: Explicitly define the type for itemType to help TypeScript inference.
+                    const itemType: 'category' | 'item' = isCategory ? 'category' : 'item';
+
+                    return {
+                        id: `${itemType}-${Date.now()}-${index}`,
+                        type: itemType,
+                        uraianPekerjaan: uraianPekerjaan,
+                        itemNumber: itemNumber,
+                        indent: indent,
+                        satuan: row[colMap['Satuan']]?.toString() || '',
+                        volume: isCategory ? 0 : parseFloat(String(row[colMap['Volume']] || '0').replace(',', '.')),
+                        hargaSatuan: 0,
+                        keterangan: row[colMap['Keterangan']]?.toString() || '',
+                        isEditing: false, isSaved: true,
+                        priceSource: isCategory ? undefined : 'manual' as const,
+                    };
+                }).filter(item => item.uraianPekerjaan);
+
+                if (parsedItems.length > 0) {
+                    setImportedItems(parsedItems);
+                    setIsImportConfirmOpen(true);
+                } else {
+                    toast.error("Tidak ada data valid yang ditemukan dalam file.");
+                }
+
+            } catch (error) {
+                console.error("Error parsing BQ Excel file:", error);
+                toast.error('Gagal mengimpor file BQ. Pastikan formatnya benar.');
+            } finally {
+                if (event.target) event.target.value = '';
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    const confirmImport = () => {
+        if (importedItems) {
+            setDetailItems(importedItems);
+            setHasUnsavedChanges(true);
+            toast.success("Data BQ berhasil diimpor ke RAB!");
+        }
+        setIsImportConfirmOpen(false);
+        setImportedItems(null);
+    };
+
     const handleOpenApprovalModal = () => {
         const toastId = toast.loading('Menyiapkan PDF...');
         setTimeout(() => {
@@ -1227,6 +1306,14 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                 title="Kunci RAB"
                 message="Apakah Anda yakin ingin mengunci RAB ini? Setelah dikunci, seluruh isian tidak dapat diubah kecuali dilakukan revisi."
             />
+            <ConfirmationModal
+                isOpen={isImportConfirmOpen}
+                onClose={() => setIsImportConfirmOpen(false)}
+                onConfirm={confirmImport}
+                title="Impor BQ ke RAB"
+                message="Ini akan menimpa semua item RAB saat ini dengan data dari file BQ. Lanjutkan?"
+            />
+
 
             <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg no-print">
@@ -1311,10 +1398,17 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                                 {isFileActionsOpen && (
                                     <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-xl z-20 animate-fade-in-up-fast p-1">
                                         <button 
+                                            onClick={() => { bqFileInputRef.current?.click(); setIsFileActionsOpen(false); }} 
+                                            disabled={effectiveIsLocked}
+                                            className="w-full text-left flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <Upload size={14} /> Import dari BQ
+                                        </button>
+                                        <div className="border-t my-1 border-gray-200 dark:border-gray-700"></div>
+                                        <button 
                                             onClick={() => { fileInputRef.current?.click(); setIsFileActionsOpen(false); }} 
                                             disabled={effectiveIsLocked}
                                             className="w-full text-left flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
-                                            <Upload size={14} /> Import dari Excel
+                                            <Upload size={14} /> Import RAB Excel
                                         </button>
                                         <button 
                                             onClick={() => { handleDownloadTemplate(); setIsFileActionsOpen(false); }}
@@ -1331,6 +1425,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                                 )}
                             </div>
                             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xlsx, .xls" className="hidden" />
+                            <input type="file" ref={bqFileInputRef} onChange={handleBqUpload} accept=".xlsx" className="hidden" />
                             <button onClick={() => setIsPriceSourceModalOpen(true)} disabled={effectiveIsLocked} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition shadow disabled:bg-gray-400 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"><Zap size={14} /> Generate Harga</button>
                         </div>
                     </div>

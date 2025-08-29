@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-import { LayoutDashboard, FileText, Briefcase, Shield, X, Building2, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, FileText, Briefcase, Shield, X, Building2 } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 
 const NavLink = ({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) => {
@@ -52,9 +52,6 @@ const SidebarContent = () => {
                 )}
                 <NavLink to="/project" icon={<Briefcase className="h-5 w-5" />}>
                 Proyek
-                </NavLink>
-                <NavLink to="/updates" icon={<MessageSquare className="h-5 w-5" />}>
-                  Updates
                 </NavLink>
             </nav>
             <div className="mt-auto p-4 border-t border-border text-center text-xs text-muted-foreground">
