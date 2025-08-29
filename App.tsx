@@ -40,11 +40,11 @@ import { type RabDocument, type Project, type PriceDatabaseItem, type WorkItem }
 const initialRabData: RabDocument[] = [
   { id: '1', eMPR: 'RAB001', projectName: 'Pembangunan Kantor Cabang Utama di Jakarta Selatan', pic: 'Andi', surveyDate: '2023-05-10', receivedDate: '2023-05-15', finishDate: '2024-01-10', status: 'Selesai', tenderValue: 1200000000, keterangan: 'Selesai lebih cepat dari jadwal.', sla: 0, pdfReady: true,
     detailItems: [
-      { id: 'cat-1', type: 'category', uraianPekerjaan: 'PEKERJAAN PERSIAPAN', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true },
-      { id: 'item-1', type: 'item', uraianPekerjaan: 'Pembersihan Lokasi dan Pematokan', volume: 1, satuan: 'Ls', hargaSatuan: 5000000, keterangan: '', isEditing: false, isSaved: true, ahs: [{id: 'ahs-1', componentName: 'Mandor', quantity: 1, unit: 'HOK', unitPrice: 200000, category: 'Jasa Pekerja', source: 'db'}] },
-      { id: 'cat-2', type: 'category', uraianPekerjaan: 'PEKERJAAN STRUKTUR', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true },
-      { id: 'item-2', type: 'item', uraianPekerjaan: 'Pekerjaan Pondasi Tiang Pancang', volume: 100, satuan: 'm3', hargaSatuan: 1200000, keterangan: 'Beton K-225', isEditing: false, isSaved: true, ahs: [] },
-      { id: 'item-3', type: 'item', uraianPekerjaan: 'Pekerjaan Struktur Beton Bertulang', volume: 150, satuan: 'm3', hargaSatuan: 4500000, keterangan: 'Beton K-300', isEditing: false, isSaved: true, ahs: [] },
+      { id: 'cat-1', type: 'category', uraianPekerjaan: 'PEKERJAAN PERSIAPAN', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true, itemNumber: 'I' },
+      { id: 'item-1', type: 'item', uraianPekerjaan: 'Pembersihan Lokasi dan Pematokan', volume: 1, satuan: 'Ls', hargaSatuan: 5000000, keterangan: '', isEditing: false, isSaved: true, ahs: [{id: 'ahs-1', componentName: 'Mandor', quantity: 1, unit: 'HOK', unitPrice: 200000, category: 'Jasa Pekerja', source: 'db'}], itemNumber: '1' },
+      { id: 'cat-2', type: 'category', uraianPekerjaan: 'PEKERJAAN STRUKTUR', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: false, isSaved: true, itemNumber: 'II' },
+      { id: 'item-2', type: 'item', uraianPekerjaan: 'Pekerjaan Pondasi Tiang Pancang', volume: 100, satuan: 'm3', hargaSatuan: 1200000, keterangan: 'Beton K-225', isEditing: false, isSaved: true, ahs: [], itemNumber: '1' },
+      { id: 'item-3', type: 'item', uraianPekerjaan: 'Pekerjaan Struktur Beton Bertulang', volume: 150, satuan: 'm3', hargaSatuan: 4500000, keterangan: 'Beton K-300', isEditing: false, isSaved: true, ahs: [], itemNumber: '2' },
   ] },
   { id: '2', eMPR: 'RAB002', projectName: 'Pengembangan Website E-commerce untuk Klien A', pic: 'Budi', surveyDate: '2023-06-21', receivedDate: '2023-06-25', finishDate: '2023-09-21', status: 'Selesai', tenderValue: 72500000, keterangan: 'Ada tambahan fitur minor.', sla: 0, pdfReady: true, detailItems: [] },
   { id: '3', eMPR: 'RAB003', projectName: 'Aplikasi Mobile Internal untuk Manajemen SDM', pic: 'Citra', surveyDate: '2023-07-02', receivedDate: null, finishDate: null, status: 'Survey', tenderValue: null, keterangan: 'Menunggu approval direksi.', sla: 0, pdfReady: false, detailItems: [] },

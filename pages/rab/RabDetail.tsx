@@ -1,14 +1,5 @@
 
 
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { type RabDocument, type RabDetailItem, type AhsComponent, type PriceDatabaseItem, type WorkItem } from '../../types';
@@ -184,7 +175,6 @@ const MissingItemsModal = ({ isOpen, onClose, missingItems, onStartAhsCreation, 
 
 interface RabDetailRowProps {
     item: RabDetailItem;
-    itemNumberString: string;
     rowIndex: number;
     totalRows: number;
     onUpdate: (id: string, field: keyof RabDetailItem, value: any) => void;
@@ -199,7 +189,7 @@ interface RabDetailRowProps {
     onAddSubItem: (id: string) => void;
 }
 
-const RabDetailRow = React.memo(({ item, itemNumberString, rowIndex, totalRows, onUpdate, onToggleDelete, onToggleEdit, onSaveRow, onMove, onManageAhs, onApplyLocalPriceSource, categorySubtotals, isLocked, onAddSubItem }: RabDetailRowProps) => {
+const RabDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleDelete, onToggleEdit, onSaveRow, onMove, onManageAhs, onApplyLocalPriceSource, categorySubtotals, isLocked, onAddSubItem }: RabDetailRowProps) => {
     const inputClasses = "w-full p-1 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-destructive focus:border-transparent transition bg-white dark:bg-gray-700/50 text-gray-900 dark:text-gray-200 text-xs placeholder-gray-400";
     const viewClasses = "block px-1 py-1 text-xs";
     const isCategory = item.type === 'category';
@@ -231,11 +221,6 @@ const RabDetailRow = React.memo(({ item, itemNumberString, rowIndex, totalRows, 
 
     const actionButtons = (
         <div className="flex justify-center items-center gap-1">
-            {!isDeleted && (
-                <button disabled={isLocked} onClick={() => onAddSubItem(item.id)} className="p-1 text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title={addSubItemTitle}>
-                    <PlusCircle size={12}/>
-                </button>
-            )}
             {!isDeleted && (canEdit ? (
                 <button onClick={() => onSaveRow(item.id)} className="p-1 text-green-600 hover:text-green-700 dark:hover:text-green-400 transition-colors" title="Simpan Baris"><Check size={12}/></button>
             ) : (
@@ -249,7 +234,17 @@ const RabDetailRow = React.memo(({ item, itemNumberString, rowIndex, totalRows, 
 
     const moveButtons = (
         <div className="flex items-center justify-center gap-x-1 h-full">
-            <span className={`text-xs text-gray-800 dark:text-gray-300 w-10 text-center ${isCategory ? 'font-bold' : ''}`}>{itemNumberString}</span>
+            {canEdit ? (
+                <input 
+                   type="text" 
+                   value={item.itemNumber || ''} 
+                   onChange={(e) => onUpdate(item.id, 'itemNumber', e.target.value)}
+                   className={`${inputClasses} w-10 text-center ${isCategory ? 'font-bold' : ''}`}
+                   placeholder="No."
+               />
+           ) : (
+               <span className={`text-xs text-gray-800 dark:text-gray-300 w-10 text-center ${isCategory ? 'font-bold' : ''}`}>{item.itemNumber}</span>
+           )}
             <div className="flex flex-col">
                 <button onClick={() => onMove(rowIndex, 'up')} disabled={isLocked || rowIndex === 0} className="p-0.5 text-gray-400 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Atas"><ArrowUp size={10} /></button>
                 <button onClick={() => onMove(rowIndex, 'down')} disabled={isLocked || rowIndex === totalRows - 1} className="p-0.5 text-gray-400 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Bawah"><ArrowDown size={10} /></button>
@@ -420,70 +415,6 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
 
     const visibleItems = useMemo(() => showDeleted ? sourceItems : sourceItems.filter(item => !item.isDeleted), [sourceItems, showDeleted]);
     
-    const itemNumbers = useMemo(() => {
-        const numberMap = new Map<string, string>();
-        let topLevelCategoryCounter = 0;
-        
-        // Map to store counters for children under a specific parent ID.
-        // The key is parentId, the value is an object { cat: count, item: count }
-        const counters = new Map<string, { cat: number, item: number }>();
-
-        visibleItems.forEach((item, index) => {
-            const indent = item.indent || 0;
-            let parent = null;
-            
-            // Find the direct parent
-            if (indent > 0) {
-                // This is more reliable than reverse().find() as it finds the *direct* parent.
-                for (let i = index - 1; i >= 0; i--) {
-                    if ((visibleItems[i].indent || 0) === indent - 1) {
-                        parent = visibleItems[i];
-                        break;
-                    }
-                }
-            }
-
-            if (item.type === 'category') {
-                if (indent === 0) {
-                    topLevelCategoryCounter++;
-                    const roman = romanize(topLevelCategoryCounter);
-                    numberMap.set(item.id, roman);
-                } else {
-                    if (parent) {
-                        const parentNumStr = numberMap.get(parent.id);
-                        const parentCounters = counters.get(parent.id) || { cat: 0, item: 0 };
-                        parentCounters.cat++;
-                        counters.set(parent.id, parentCounters);
-                        
-                        const newNumStr = `${parentNumStr}.${parentCounters.cat}`;
-                        numberMap.set(item.id, newNumStr);
-                    } else {
-                        numberMap.set(item.id, `?.?`);
-                    }
-                }
-            } else { // type === 'item'
-                if (parent) {
-                    const parentNumStr = numberMap.get(parent.id);
-                    const parentCounters = counters.get(parent.id) || { cat: 0, item: 0 };
-                    parentCounters.item++;
-                    counters.set(parent.id, parentCounters);
-                    
-                    const newNumStr = `${parentNumStr}.${parentCounters.item}`;
-                    numberMap.set(item.id, newNumStr);
-                } else {
-                    // This would be a top-level item without a category.
-                    // Fallback to a simple counter.
-                    const rootCounters = counters.get('root_items') || { cat: 0, item: 0 };
-                    rootCounters.item++;
-                    counters.set('root_items', rootCounters);
-                    numberMap.set(item.id, String(rootCounters.item));
-                }
-            }
-        });
-
-        return numberMap;
-    }, [visibleItems]);
-
     const totalRAB = useMemo(() => sourceItems.reduce((sum, item) => sum + (item.type === 'item' && !item.isDeleted ? (Number(item.volume) * Number(item.hargaSatuan)) : 0), 0), [sourceItems]);
 
     const categorySubtotals = useMemo(() => {
@@ -509,8 +440,8 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
     const handleItemChange = useCallback((id: string, field: keyof RabDetailItem, value: any) => { setDetailItems(currentItems => currentItems.map(item => item.id === id ? { ...item, [field]: value } : item)); setHasUnsavedChanges(true); }, []);
     const handleToggleEdit = useCallback((id: string) => setDetailItems(items => items.map(item => item.id === id ? { ...item, isEditing: !item.isEditing } : { ...item, isEditing: false })), []);
     const handleSaveRow = useCallback((id: string) => { setDetailItems(items => items.map(item => item.id === id ? { ...item, isEditing: false, isSaved: true } : item)); toast.success('Baris disimpan!'); setHasUnsavedChanges(true); }, []);
-    const handleAddCategory = () => { setDetailItems([...detailItems, { id: `cat-${Date.now()}`, type: 'category', uraianPekerjaan: 'KATEGORI BARU', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: true, isSaved: false, isNew: true }]); setHasUnsavedChanges(true); };
-    const handleAddItem = () => { setDetailItems([...detailItems, { id: `item-${Date.now()}`, type: 'item', uraianPekerjaan: '', volume: 1.00, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: true, isSaved: false, priceSource: 'manual', isNew: true }]); setHasUnsavedChanges(true); };
+    const handleAddCategory = () => { setDetailItems([...detailItems, { id: `cat-${Date.now()}`, type: 'category', uraianPekerjaan: 'KATEGORI BARU', volume: 0, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: true, isSaved: false, isNew: true, itemNumber: '' }]); setHasUnsavedChanges(true); };
+    const handleAddItem = () => { setDetailItems([...detailItems, { id: `item-${Date.now()}`, type: 'item', uraianPekerjaan: '', volume: 1.00, satuan: '', hargaSatuan: 0, keterangan: '', isEditing: true, isSaved: false, priceSource: 'manual', isNew: true, itemNumber: '' }]); setHasUnsavedChanges(true); };
     
     const handleAddSubItem = useCallback((parentId: string) => {
         setDetailItems(currentItems => {
@@ -546,6 +477,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                 priceSource: newType === 'item' ? 'manual' : undefined,
                 isNew: true,
                 indent: newIndent,
+                itemNumber: '',
             };
             
             const newItems = [...currentItems];
@@ -838,11 +770,11 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
 
         // --- 2. TABLE ---
         const formatInt = (val: number) => {
-            if (isNaN(val)) return '0';
+            if (isNaN(val) || val === 0) return '';
             return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
         };
         const formatVol = (val: number | null) => {
-            if (val === null) return '';
+            if (val === null || val === 0) return '';
             return new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
         };
         
@@ -862,7 +794,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
             if (item.isDeleted) uraianText = `(DIHAPUS) ${uraianText}`;
 
             let rowData;
-            const itemNumber = itemNumbers.get(item.id) || '';
+            const itemNumber = item.itemNumber || '';
             if (item.type === 'category') {
                 rowData = [
                     { content: itemNumber, styles: boldStyle },
@@ -975,7 +907,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
         doc.setTextColor(15, 23, 42);
         doc.text('TOTAL', pageWidth - pageMargin - 50, totalY, { align: 'right' });
         doc.setTextColor(228, 0, 43);
-        doc.text(`Rp ${formatInt(totalRAB)}`, pageWidth - pageMargin, totalY, { align: 'right' });
+        doc.text(`Rp ${formatNumber(totalRAB)}`, pageWidth - pageMargin, totalY, { align: 'right' });
         doc.setTextColor(0, 0, 0);
 
         // --- 4. FOOTER INFO ---
@@ -998,7 +930,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
         } else {
             return doc.output('datauristring');
         }
-    }, [rab, sourceItems, totalRAB, creatorName, approverName, workDuration, revisionText, categorySubtotals, showDeleted, itemNumbers]);
+    }, [rab, sourceItems, totalRAB, creatorName, approverName, workDuration, revisionText, categorySubtotals, showDeleted]);
 
 
     const handleSaveData = () => {
@@ -1415,7 +1347,6 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                                     <RabDetailRow 
                                         key={item.id} 
                                         item={item}
-                                        itemNumberString={itemNumbers.get(item.id) || ''}
                                         rowIndex={sourceItems.findIndex(d => d.id === item.id)} 
                                         totalRows={sourceItems.length} 
                                         onUpdate={handleItemChange} 

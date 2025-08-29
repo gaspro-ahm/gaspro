@@ -122,6 +122,7 @@ export interface RabDetailItem {
     // New fields for deletion and addition tracking
     isDeleted?: boolean;
     isNew?: boolean;
+    itemNumber?: string;
 }
 
 export interface RabDocument {
