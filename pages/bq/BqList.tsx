@@ -7,6 +7,7 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { createDocument, updateDocument, deleteDocument } from '../../services/db';
 
 interface StatusBadgeProps {
   status: RabDocument['status'];
@@ -15,6 +16,7 @@ interface StatusBadgeProps {
 const StatusBadge = ({ status }: StatusBadgeProps) => {
   const baseClasses = "px-2.5 py-1 text-xs font-semibold rounded-full inline-block tracking-wide";
   
+  // FIX: Added 'Menunggu Approval' to the status classes record to satisfy the type requirement.
   const statusClasses: Record<RabDocument['status'], string> = {
     Selesai: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300",
     Approval: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300",
@@ -27,6 +29,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
   
   return <span className={`${baseClasses} ${statusClasses[status]}`}>{status}</span>;
 };
+
 
 interface ActionMenuProps {
     bq: RabDocument;
@@ -131,6 +134,9 @@ type SortOrder = 'asc' | 'desc';
 
 
 const BqRow = React.memo(({ bq, index, onEdit, onDelete, onMove, totalRows } : { bq: RabDocument, index: number, onEdit: (bq: RabDocument) => void, onDelete: (id: string) => void, onMove: (index: number, direction: 'up' | 'down') => void, totalRows: number }) => {
+    
+    const slaValue = calculateSla(bq.receivedDate, bq.finishDate);
+
     return (
         <tr className={`group bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors`}>
             <td className="px-2 py-2 text-center text-xs">
@@ -164,7 +170,15 @@ const BqRow = React.memo(({ bq, index, onEdit, onDelete, onMove, totalRows } : {
                 </div>
             </td>
             <td className="px-4 py-2 text-center"><StatusBadge status={bq.status} /></td>
-            <td className="px-4 py-2 text-center font-medium text-xs">{calculateSla(bq.receivedDate, bq.finishDate)}</td>
+            <td className="px-4 py-2 text-center font-medium text-xs">
+                {bq.status === 'Selesai' && typeof slaValue === 'number' ? (
+                    <span className={slaValue <= 3 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                        {slaValue}
+                    </span>
+                ) : (
+                    slaValue
+                )}
+            </td>
             <td className="px-4 py-2 text-xs">{bq.keterangan || '-'}</td>
             <td className="px-4 py-2 text-center">
                 <ActionMenu bq={bq} onDelete={onDelete} onEdit={onEdit} />
@@ -228,7 +242,7 @@ const BqList = () => {
         const slaValue = calculateSla(bq.receivedDate, bq.finishDate);
         const matchesSla = (() => {
             if (slaFilter.min === '' && slaFilter.max === '') return true;
-            if (typeof slaValue !== 'number') return false; // Don't match if SLA is '-'
+            if (typeof slaValue !== 'number') return false;
             const minSla = slaFilter.min !== '' ? parseFloat(slaFilter.min) : -Infinity;
             const maxSla = slaFilter.max !== '' ? parseFloat(slaFilter.max) : Infinity;
             return slaValue >= minSla && slaValue <= maxSla;
@@ -236,7 +250,6 @@ const BqList = () => {
         
         return matchesSearch && matchesStatus && matchesDates && matchesSla;
     });
-
 
     if (sortConfig) {
       data.sort((a, b) => {
@@ -272,7 +285,20 @@ const BqList = () => {
   const handleDateFilterChange = (type: 'survey' | 'received' | 'finish', field: 'from' | 'to', value: string) => { setDateFilters(prev => ({ ...prev, [type]: { ...prev[type], [field]: value, }, })); };
   
   const handleDeleteRequest = useCallback((id: string) => { setItemToDelete(id); setIsConfirmOpen(true); }, []);
-  const confirmDelete = () => { if (itemToDelete) { const newData = bqData.filter(bq => bq.id !== itemToDelete); setBqData(newData); toast.success('BQ berhasil dihapus.'); } setIsConfirmOpen(false); setItemToDelete(null); };
+  
+  const confirmDelete = () => {
+    if (itemToDelete) {
+      const success = deleteDocument(itemToDelete);
+      if (success) {
+        setBqData(prev => prev.filter(bq => bq.id !== itemToDelete));
+        toast.success('BQ berhasil dihapus.');
+      } else {
+        toast.error('Gagal menghapus BQ.');
+      }
+    }
+    setIsConfirmOpen(false);
+    setItemToDelete(null);
+  };
 
   const resetFilters = () => {
     setStatusFilters([]);
@@ -281,10 +307,27 @@ const BqList = () => {
     setIsFilterOpen(false);
   };
 
-  const handleSaveBq = (dataToSave: Omit<RabDocument, 'sla' | 'detailItems' | 'pdfReady'> & { id?: string }) => {
-    if (dataToSave.id) { setBqData(prev => prev.map(bq => (bq.id === dataToSave.id ? { ...bq, ...dataToSave } : bq))); toast.success('BQ berhasil diperbarui!'); } 
-    else { const newBq: RabDocument = { ...dataToSave, id: Date.now().toString(), sla: 0, detailItems: [], pdfReady: false, }; setBqData(prev => [newBq, ...prev]); navigate(`/bq/detail/${newBq.id}`); }
-    setIsModalOpen(false); setEditingBq(null);
+  const handleSaveBq = (dataToSave: Omit<RabDocument, 'id' | 'sla' | 'detailItems' | 'pdfReady' | 'approvalRequestDetails' | 'isLocked' | 'revisionHistory'> & { id?: string }) => {
+    if (dataToSave.id) {
+        const success = updateDocument(dataToSave.id, dataToSave);
+        if (success) {
+            setBqData(prev => prev.map(bq => (bq.id === dataToSave.id ? { ...bq, ...dataToSave } : bq)));
+            toast.success('BQ berhasil diperbarui!');
+        } else {
+            toast.error('Gagal memperbarui BQ.');
+        }
+    } else {
+        const newBq = createDocument(dataToSave, true); // true for BQ
+        if (newBq) {
+            setBqData(prev => [newBq, ...prev]);
+            toast.success('BQ baru dibuat & disimpan!');
+            navigate(`/bq/detail/${newBq.id}`);
+        } else {
+            toast.error('Gagal membuat BQ baru.');
+        }
+    }
+    setIsModalOpen(false);
+    setEditingBq(null);
   };
 
   const handleMoveRow = useCallback((viewIndex: number, direction: 'up' | 'down') => {
@@ -304,7 +347,6 @@ const BqList = () => {
         if (fromIndex === -1 || toIndex === -1) return currentData;
 
         const reorderedData = [...currentData];
-        // Swap elements
         [reorderedData[fromIndex], reorderedData[toIndex]] = [reorderedData[toIndex], reorderedData[fromIndex]];
         
         return reorderedData;
@@ -345,35 +387,21 @@ const BqList = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const formatDate = (dateString: string | null) => dateString ? new Date(dateString).toLocaleDateString('id-ID') : '-';
 
-    // Set Header
     doc.text("Monitoring BQ", 14, 15);
     doc.setFontSize(11);
     doc.text("Rekapitulasi Bill of Quantity Proyek", 14, 22);
 
-    const statusColors: { [key in RabDocument['status']]: { bg: number[], text: number[] } } = {
-        Selesai: { bg: [220, 252, 231], text: [22, 101, 52] },
-        Diterima: { bg: [224, 242, 254], text: [7, 89, 133] },
-        Ditolak: { bg: [254, 226, 226], text: [153, 27, 27] },
-        Approval: { bg: [238, 242, 255], text: [67, 56, 202] },
-        Survey:   { bg: [254, 249, 195], text: [133, 77, 14] },
-        'Pending': { bg: [255, 247, 237], text: [154, 52, 18] },
-        'Menunggu Approval': { bg: [245, 243, 255], text: [91, 33, 182] },
-    };
-
-
     const head = [['NO', 'EMPR', 'URAIAN PROJECT', 'PIC', 'TIMELINE', 'STATUS', 'SLA (HARI KERJA)', 'KETERANGAN']];
-    const body = sortedAndFilteredData.map((bq, index) => {
-        return [
-            index + 1,
-            bq.eMPR,
-            bq.projectName,
-            bq.pic,
-            `Survey: ${formatDate(bq.surveyDate)}\nDiterima: ${formatDate(bq.receivedDate)}\nSelesai: ${formatDate(bq.finishDate)}`,
-            bq.status,
-            calculateSla(bq.receivedDate, bq.finishDate),
-            bq.keterangan || '-'
-        ];
-    });
+    const body = sortedAndFilteredData.map((bq, index) => [
+        index + 1,
+        bq.eMPR,
+        bq.projectName,
+        bq.pic,
+        `Survey: ${formatDate(bq.surveyDate)}\nDiterima: ${formatDate(bq.receivedDate)}\nSelesai: ${formatDate(bq.finishDate)}`,
+        bq.status,
+        calculateSla(bq.receivedDate, bq.finishDate),
+        bq.keterangan || '-'
+    ]);
 
     autoTable(doc, {
         startY: 30,
@@ -381,50 +409,11 @@ const BqList = () => {
         body: body,
         theme: 'grid',
         headStyles: {
-            fillColor: [243, 244, 246],
-            textColor: [55, 65, 81],
+            fillColor: [243, 244, 246], 
+            textColor: [55, 65, 81],    
             fontStyle: 'bold',
-            lineColor: [209, 213, 219],
-            lineWidth: 0.1,
         },
-        styles: {
-            font: 'helvetica',
-            fontSize: 7,
-            cellPadding: 2,
-            valign: 'middle'
-        },
-        columnStyles: {
-            0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 25, halign: 'center' }, 2: { cellWidth: 70, halign: 'left' }, 3: { cellWidth: 20, halign: 'center' }, 4: { cellWidth: 35, halign: 'left' }, 5: { cellWidth: 25, halign: 'center' }, 6: { cellWidth: 20, halign: 'center' }, 7: { cellWidth: 'auto', halign: 'left' }
-        },
-        willDrawCell: (data) => {
-            if (data.section === 'head') {
-                data.cell.styles.halign = 'center';
-            }
-        },
-        didDrawCell: (data) => {
-            if (data.section === 'body' && data.column.index === 5) {
-                const status = data.cell.raw as RabDocument['status'];
-                const finalColors = statusColors[status];
-                const text = status;
-
-                if (finalColors) {
-                    const { bg, text: textColor } = finalColors;
-                    const { x, y, width, height } = data.cell;
-                    
-                    const textWidth = doc.getStringUnitWidth(text) * (data.cell.styles.fontSize || 7) / doc.internal.scaleFactor;
-                    const badgeWidth = textWidth + 4;
-                    const badgeHeight = 5;
-                    const badgeX = x + (width - badgeWidth) / 2;
-                    const badgeY = y + (height - badgeHeight) / 2;
-                    doc.setFillColor(bg[0], bg[1], bg[2]);
-                    doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 1.5, 1.5, 'F');
-                    doc.setFontSize(7);
-                    doc.setFont('helvetica', 'bold');
-                    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-                    doc.text(text, badgeX + badgeWidth / 2, badgeY + badgeHeight / 2, { align: 'center', baseline: 'middle' });
-                }
-            }
-        }
+        styles: { fontSize: 8, cellPadding: 2 },
     });
 
     doc.save('daftar-bq.pdf');
@@ -521,7 +510,7 @@ const BqList = () => {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400 border-collapse">
-            <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700/50">
+            <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10">
               <tr>
                 <th scope="col" className="px-4 py-3 uppercase w-20 text-center">No</th>
                 <th scope="col" className={`${headerButtonClass} w-40`} onClick={() => handleHeaderSort('eMPR')}>eMPR {getSortIndicator('eMPR')}</th>

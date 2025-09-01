@@ -23,6 +23,8 @@ interface AdminLayoutProps {
     initialPriceDatabase: PriceDatabaseItem[];
     initialWorkItems: WorkItem[];
   };
+  fetchAllData: () => Promise<void>;
+  handleSaveAllData: () => Promise<boolean>;
 }
 
 const AdminLayout = (props: AdminLayoutProps) => {

@@ -1,6 +1,8 @@
 
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { type RabDocument, type RabDetailItem, type AhsComponent, type PriceDatabaseItem, type WorkItem } from '../../types';
 import { Plus, Trash2, ArrowLeft, Save, Pencil, Check, Zap, Loader2, ArrowUp, ArrowDown, FileText, X, ChevronDown, Database, SlidersHorizontal, AlertTriangle, Layers, Calculator, Wand2, CheckCircle, Send, Upload, Download, FileDown, Lock, Edit, RotateCcw, PlusCircle } from 'lucide-react';
@@ -12,6 +14,8 @@ import * as XLSX from 'xlsx';
 import AhsEditorModal from '../../components/AhsEditorModal';
 import ApprovalModal from '../../components/ApprovalModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import { updateDocument } from '../../services/db';
+import { NotificationContext } from '../../contexts/NotificationContext';
 
 
 // --- Helper Components & Functions ---
@@ -265,7 +269,7 @@ const RabDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggle
                 {canEdit && !isCategory ? (
                     <input
                         type="text"
-                        defaultValue={item.volume ? item.volume.toString().replace('.', ',') : ''}
+                        defaultValue={item.volume !== null ? item.volume.toString().replace('.', ',') : ''}
                         onKeyDown={handleInputKeyDown}
                         onBlur={(e) => {
                             const value = e.currentTarget.value;
@@ -289,7 +293,7 @@ const RabDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggle
                         className={`${inputClasses} text-right`}
                     />
                 ) : (
-                    <span className={`${viewClasses} text-right ${textClasses}`}>{isCategory ? '' : (item.volume ? item.volume.toFixed(2).replace('.', ',') : '')}</span>
+                    <span className={`${viewClasses} text-right ${textClasses}`}>{isCategory ? '' : (item.volume !== null ? item.volume.toFixed(2).replace('.', ',') : '')}</span>
                 )}
             </td>
             <td className="px-2 py-1 align-top w-40 relative">
@@ -345,6 +349,7 @@ RabDetailRow.displayName = 'RabDetailRow';
 const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workItems, setWorkItems }: { rabData: RabDocument[]; setRabData: React.Dispatch<React.SetStateAction<RabDocument[]>>; priceDatabase: PriceDatabaseItem[]; setPriceDatabase: React.Dispatch<React.SetStateAction<PriceDatabaseItem[]>>; workItems: WorkItem[]; setWorkItems: React.Dispatch<React.SetStateAction<WorkItem[]>> }) => {
     const { rabId } = useParams<{ rabId: string }>();
     const navigate = useNavigate();
+    const { addNotification } = useContext(NotificationContext);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const bqFileInputRef = useRef<HTMLInputElement>(null);
     const fileActionsMenuRef = useRef<HTMLDivElement>(null);
@@ -942,9 +947,11 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
     const handleSaveData = () => {
         if (!rab) return;
         setIsSubmitting(true);
-        // Filter out soft-deleted items PERMANENTLY before saving
+        
+        const oldRab = rabData.find(r => r.id === rabId);
+        const oldStatus = oldRab?.status;
+
         const itemsToSave = detailItems.filter(item => !item.isDeleted);
-        // Clean up isNew flag from the items that will be saved
         const finalItems = itemsToSave.map(item => {
             const { isNew, isDeleted, ...rest } = item;
             return { ...rest, isEditing: false, isSaved: true, isPricingLoading: false };
@@ -952,13 +959,31 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
 
         const updatedRab: RabDocument = { ...rab, detailItems: finalItems, pdfReady: true, creatorName, approverName, workDuration: Number(workDuration) || undefined, revisionText };
         
-        setTimeout(() => {
+        const success = updateDocument(rab.id, updatedRab);
+
+        if (success) {
             setRabData(prevRabData => prevRabData.map(r => r.id === rabId ? updatedRab : r));
             setDetailItems(finalItems);
             setHasUnsavedChanges(false);
-            setIsSubmitting(false);
             toast.success('RAB berhasil disimpan!');
-        }, 500);
+            
+            if (oldStatus && oldStatus !== updatedRab.status) {
+                addNotification({
+                    text: `Status RAB "${updatedRab.projectName}" diperbarui menjadi ${updatedRab.status}.`,
+                    icon: 'CheckCircle',
+                    link: `/rab/detail/${updatedRab.id}`
+                });
+            } else {
+                 addNotification({
+                    text: `RAB "${updatedRab.projectName}" berhasil disimpan.`,
+                    icon: 'Save',
+                    link: `/rab/detail/${updatedRab.id}`
+                });
+            }
+        } else {
+            toast.error('Gagal menyimpan RAB.');
+        }
+        setIsSubmitting(false);
     };
 
     const handleConfirmLock = () => {
@@ -982,6 +1007,11 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
             setHasUnsavedChanges(false);
             setIsSubmitting(false);
             toast.success('RAB berhasil dikunci dan ditandai Selesai!');
+            addNotification({
+                text: `RAB "${updatedRab.projectName}" telah dikunci dan selesai.`,
+                icon: 'Lock',
+                link: `/rab/detail/${updatedRab.id}`
+            });
         }, 300);
     };
 
@@ -1158,8 +1188,10 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                     const uraianPekerjaan = uraianRaw.trim();
                     const itemNumber = row[colMap['No']]?.toString() || '';
                     const isCategory = /^[IVXLCDM]+$/i.test(itemNumber) || (!row[colMap['Satuan']] && !row[colMap['Volume']]);
-                    // FIX: Explicitly define the type for itemType to help TypeScript inference.
                     const itemType: 'category' | 'item' = isCategory ? 'category' : 'item';
+
+                    const rawVolume = String(row[colMap['Volume']] || '0').replace(',', '.');
+                    const parsedVolume = parseFloat(rawVolume);
 
                     return {
                         id: `${itemType}-${Date.now()}-${index}`,
@@ -1168,7 +1200,7 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
                         itemNumber: itemNumber,
                         indent: indent,
                         satuan: row[colMap['Satuan']]?.toString() || '',
-                        volume: isCategory ? 0 : parseFloat(String(row[colMap['Volume']] || '0').replace(',', '.')),
+                        volume: isCategory || isNaN(parsedVolume) ? null : parsedVolume,
                         hargaSatuan: 0,
                         keterangan: row[colMap['Keterangan']]?.toString() || '',
                         isEditing: false, isSaved: true,
@@ -1245,6 +1277,12 @@ const RabDetail = ({ rabData, setRabData, priceDatabase, setPriceDatabase, workI
 
         setIsApprovalModalOpen(false);
         toast.success('RAB telah ditandai "Menunggu Approval".');
+        addNotification({
+            text: `RAB "${updatedRab.projectName}" telah dikirim untuk approval.`,
+            icon: 'Send',
+            link: `/rab/detail/${updatedRab.id}`
+        });
+
 
         let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         if (cc) {

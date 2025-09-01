@@ -21,8 +21,8 @@ const LoginPage = () => {
         e.preventDefault();
         setIsLoading(true);
 
-        setTimeout(() => {
-            const success = login(email, password);
+        setTimeout(async () => {
+            const success = await login(email, password);
             if (success) {
                 toast.success('Login berhasil!');
                 addLog({ level: 'INFO', user: email, action: 'LOGIN_SUCCESS', details: 'User logged in successfully.' });

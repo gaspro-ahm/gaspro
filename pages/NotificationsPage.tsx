@@ -1,30 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-import { CheckCircle, Clock, MessageSquare, Server, Check, Bell } from 'lucide-react';
-
-interface Notification {
-  id: number;
-  text: string;
-  time: string;
-  read: boolean;
-  icon: string;
-  link?: string;
-}
-
-interface NotificationsPageProps {
-    notifications: Notification[];
-    setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
-}
+import { CheckCircle, Clock, MessageSquare, Server, Check, Bell, Trash2, Edit, Plus, Save, Send, Lock, TrendingUp } from 'lucide-react';
+import { NotificationContext, type Notification } from '../contexts/NotificationContext';
 
 const icons: { [key: string]: React.ReactElement } = {
   CheckCircle: <CheckCircle className="text-green-500" />,
   Clock: <Clock className="text-yellow-500" />,
   MessageSquare: <MessageSquare className="text-blue-500" />,
   Server: <Server className="text-gray-500" />,
+  Trash2: <Trash2 className="text-red-500" />,
+  Edit: <Edit className="text-blue-500" />,
+  Plus: <Plus className="text-green-500" />,
+  Save: <Save className="text-gray-500" />,
+  Send: <Send className="text-purple-500" />,
+  Lock: <Lock className="text-gray-600" />,
+  TrendingUp: <TrendingUp className="text-green-500" />,
 };
 
 
-const NotificationsPage = ({ notifications, setNotifications }: NotificationsPageProps) => {
+const NotificationsPage = () => {
+    const { notifications, setNotifications } = useContext(NotificationContext);
 
     const handleMarkAllAsRead = () => {
         setNotifications(notifications.map(n => ({ ...n, read: true })));

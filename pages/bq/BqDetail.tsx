@@ -4,6 +4,11 @@
 
 
 
+
+
+
+
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { type RabDocument, type RabDetailItem, type AhsComponent, type PriceDatabaseItem, type WorkItem } from '../../types';
@@ -17,6 +22,7 @@ import AhsEditorModal from '../../components/AhsEditorModal';
 import ApprovalModal from '../../components/ApprovalModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import GenerateBqModal from '../../components/GenerateBqModal';
+import { updateDocument } from '../../services/db';
 
 
 // --- Helper Components & Functions ---
@@ -121,7 +127,7 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const inputClasses = "w-full p-1 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-honda-red focus:border-transparent transition bg-white dark:bg-gray-700/50 text-gray-900 dark:text-gray-200 text-xs placeholder-gray-400";
+    const inputClasses = "w-full p-1 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-1 focus:ring-destructive focus:border-transparent transition bg-white dark:bg-gray-700/50 text-gray-900 dark:text-gray-200 text-xs placeholder-gray-400";
     const viewClasses = "block px-1 py-1 text-xs";
     const isCategory = item.type === 'category';
     
@@ -131,7 +137,7 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
 
     const rowClasses = [
         isCategory ? 'bg-gray-200/70 dark:bg-gray-700/70 font-bold' : 'bg-white dark:bg-gray-800/60',
-        'border-b dark:border-gray-700/50 hover:bg-honda-red/5 dark:hover:bg-honda-red/10 transition-colors duration-200',
+        'border-b dark:border-gray-700/50 hover:bg-destructive/5 dark:hover:bg-destructive/10 transition-colors duration-200',
         isDeleted ? 'bg-red-50/50 dark:bg-red-900/40 text-red-700 dark:text-red-500 opacity-70' : '',
         isNew ? 'bg-green-50/50 dark:bg-green-900/40' : ''
     ].join(' ');
@@ -175,7 +181,7 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
             ) : (
                 <button disabled={isLocked} onClick={() => onToggleEdit(item.id)} className="p-1 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Edit Baris"><Pencil size={12}/></button>
             ))}
-            <button disabled={isLocked} onClick={() => onToggleDelete(item.id)} className={`p-1 transition-colors ${isDeleted ? 'text-blue-600 hover:text-blue-500' : 'text-gray-500 hover:text-honda-red dark:hover:text-red-400'} disabled:opacity-30 disabled:cursor-not-allowed`} title={isDeleted ? "Pulihkan Baris" : "Hapus Baris"}>
+            <button disabled={isLocked} onClick={() => onToggleDelete(item.id)} className={`p-1 transition-colors ${isDeleted ? 'text-blue-600 hover:text-blue-500' : 'text-gray-500 hover:text-destructive dark:hover:text-red-400'} disabled:opacity-30 disabled:cursor-not-allowed`} title={isDeleted ? "Pulihkan Baris" : "Hapus Baris"}>
                  {isDeleted ? <RotateCcw size={12}/> : <Trash2 size={12}/>}
             </button>
         </div>
@@ -195,15 +201,15 @@ const BqDetailRow = React.memo(({ item, rowIndex, totalRows, onUpdate, onToggleD
                 <span className={`text-xs text-gray-800 dark:text-gray-300 w-10 text-center ${isCategory ? 'font-bold' : ''}`}>{item.itemNumber}</span>
             )}
             <div className="flex flex-col">
-                <button onClick={() => onMove(rowIndex, 'up')} disabled={isLocked || rowIndex === 0} className="p-0.5 text-gray-400 hover:text-honda-red disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Atas"><ArrowUp size={10} /></button>
-                <button onClick={() => onMove(rowIndex, 'down')} disabled={isLocked || rowIndex === totalRows - 1} className="p-0.5 text-gray-400 hover:text-honda-red disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Bawah"><ArrowDown size={10} /></button>
+                <button onClick={() => onMove(rowIndex, 'up')} disabled={isLocked || rowIndex === 0} className="p-0.5 text-gray-400 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Atas"><ArrowUp size={10} /></button>
+                <button onClick={() => onMove(rowIndex, 'down')} disabled={isLocked || rowIndex === totalRows - 1} className="p-0.5 text-gray-400 hover:text-destructive disabled:opacity-20 disabled:cursor-not-allowed" title="Pindah Bawah"><ArrowDown size={10} /></button>
             </div>
         </div>
     );
 
     return (
         <tr className={rowClasses}>
-            <td className="px-1 py-1 text-center align-top w-20">{moveButtons}</td>
+            <td className="px-1 py-1 text-center align-top w-16">{moveButtons}</td>
             <td className="px-2 py-1 align-top min-w-[300px] relative" style={indentPadding} ref={suggestionBoxRef}>
                 {canEdit ? (
                     <>
@@ -619,7 +625,7 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
         setIsFileActionsOpen(false);
     };
 
-    const handleSaveData = () => {
+    const handleSaveData = async () => {
         if (!bq) return;
         setIsSubmitting(true);
         const itemsToSave = detailItems.filter(item => !item.isDeleted);
@@ -630,13 +636,17 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
 
         const updatedBq: RabDocument = { ...bq, detailItems: finalItems, pdfReady: true, creatorName, approverName, workDuration: Number(workDuration) || undefined, revisionText };
         
-        setTimeout(() => {
+        const success = await updateDocument(bq.id, updatedBq);
+
+        if (success) {
             setBqData(prevBqData => prevBqData.map(r => r.id === bqId ? updatedBq : r));
             setDetailItems(finalItems);
             setHasUnsavedChanges(false);
-            setIsSubmitting(false);
-            toast.success('BQ berhasil disimpan!');
-        }, 500);
+            toast.success('BQ berhasil disimpan ke database!');
+        } else {
+            toast.error('Gagal menyimpan BQ ke database.');
+        }
+        setIsSubmitting(false);
     };
 
     const handleConfirmLock = () => {
@@ -800,8 +810,10 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
 
                 const newItems: RabDetailItem[] = dataRows.map((row, index) => {
                     const uraian = String(row[0] || '');
-                    const volume = parseFloat(String(row[2] || '0').replace(',', '.'));
-                    const isCategory = !volume && uraian === uraian.toUpperCase() && uraian.trim() !== '';
+                    const volumeRaw = String(row[2] || '0').replace(',', '.');
+                    const volume = parseFloat(volumeRaw);
+                    const hargaSatuan = parseInt(String(row[3] || '0'));
+                    const isCategory = !volume && !hargaSatuan && uraian === uraian.toUpperCase() && uraian.trim() !== '';
                     
                     const itemType: 'category' | 'item' = isCategory ? 'category' : 'item';
 
@@ -809,7 +821,7 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
                         id: `${isCategory ? 'cat' : 'item'}-${Date.now()}-${index}`,
                         type: itemType,
                         uraianPekerjaan: uraian,
-                        volume: isCategory ? 0 : volume,
+                        volume: isCategory || isNaN(volume) ? null : volume,
                         satuan: isCategory ? '' : String(row[1] || ''),
                         hargaSatuan: 0,
                         keterangan: String(row[3] || ''),
@@ -1048,7 +1060,7 @@ const BqDetail = ({ bqData, setBqData, priceDatabase, setPriceDatabase, workItem
                         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                             <thead className="text-sm align-top text-gray-700 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-700/50">
                                 <tr>
-                                    <th className="px-2 py-2 w-20 text-center font-semibold text-sm">No.</th>
+                                    <th className="px-2 py-2 w-16 text-center font-semibold text-sm">No.</th>
                                     <th className="px-2 py-2 min-w-[300px] font-semibold text-center text-sm">Uraian Pekerjaan</th>
                                     <th className="px-2 py-2 w-24 text-center font-semibold text-sm">Sat</th>
                                     <th className="px-2 py-2 w-28 text-center font-semibold text-sm">Vol</th>

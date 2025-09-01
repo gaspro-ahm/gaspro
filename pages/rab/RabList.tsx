@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, useContext } from 'react';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import { type RabDocument } from '../../types';
 import { Search, Plus, FileDown, MoreVertical, Eye, Trash2, Filter, Pencil, Save, ArrowUp, ArrowDown } from 'lucide-react';
@@ -7,6 +7,8 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { createDocument, updateDocument, deleteDocument } from '../../services/db';
+import { NotificationContext } from '../../contexts/NotificationContext';
 
 interface StatusBadgeProps {
   status: RabDocument['status'];
@@ -220,6 +222,7 @@ const RabRow = React.memo(({ rab, index, onEdit, onDelete, onMove, totalRows } :
 
 const RabList = () => {
   const { rabData, setRabData } = useOutletContext<RabDataContext>();
+  const { addNotification } = useContext(NotificationContext);
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -336,7 +339,28 @@ const RabList = () => {
   const handleDateFilterChange = (type: 'survey' | 'received' | 'finish', field: 'from' | 'to', value: string) => { setDateFilters(prev => ({ ...prev, [type]: { ...prev[type], [field]: value, }, })); };
   
   const handleDeleteRequest = useCallback((id: string) => { setItemToDelete(id); setIsConfirmOpen(true); }, []);
-  const confirmDelete = () => { if (itemToDelete) { const newData = rabData.filter(rab => rab.id !== itemToDelete); setRabData(newData); toast.success('RAB berhasil dihapus.'); } setIsConfirmOpen(false); setItemToDelete(null); };
+  
+  const confirmDelete = () => {
+    if (itemToDelete) {
+      const item = rabData.find(r => r.id === itemToDelete);
+      const success = deleteDocument(itemToDelete);
+      if (success) {
+        setRabData(prev => prev.filter(rab => rab.id !== itemToDelete));
+        toast.success('RAB berhasil dihapus.');
+        if (item) {
+            addNotification({
+                text: `RAB "${item.projectName}" telah dihapus.`,
+                icon: 'Trash2',
+                link: '/rab/daftar'
+            });
+        }
+      } else {
+        toast.error('Gagal menghapus RAB.');
+      }
+    }
+    setIsConfirmOpen(false);
+    setItemToDelete(null);
+  };
 
   const resetFilters = () => {
     setStatusFilters([]);
@@ -346,10 +370,37 @@ const RabList = () => {
     setIsFilterOpen(false);
   };
 
-  const handleSaveRab = (dataToSave: Omit<RabDocument, 'sla' | 'detailItems' | 'pdfReady'> & { id?: string }) => {
-    if (dataToSave.id) { setRabData(prev => prev.map(rab => (rab.id === dataToSave.id ? { ...rab, ...dataToSave } : rab))); toast.success('RAB berhasil diperbarui!'); } 
-    else { const newRab: RabDocument = { ...dataToSave, id: Date.now().toString(), sla: 0, detailItems: [], pdfReady: false, }; setRabData(prev => [newRab, ...prev]); navigate(`/rab/detail/${newRab.id}`); }
-    setIsModalOpen(false); setEditingRab(null);
+  const handleSaveRab = (dataToSave: Omit<RabDocument, 'id' | 'sla' | 'detailItems' | 'pdfReady' | 'approvalRequestDetails' | 'isLocked' | 'revisionHistory'> & { id?: string }) => {
+    if (dataToSave.id) {
+        const success = updateDocument(dataToSave.id, dataToSave);
+        if (success) {
+            setRabData(prev => prev.map(rab => (rab.id === dataToSave.id ? { ...rab, ...dataToSave } : rab)));
+            toast.success('RAB berhasil diperbarui!');
+            addNotification({
+                text: `RAB "${dataToSave.projectName}" telah diperbarui.`,
+                icon: 'Edit',
+                link: `/rab/detail/${dataToSave.id}`
+            });
+        } else {
+            toast.error('Gagal memperbarui RAB.');
+        }
+    } else {
+        const newRab = createDocument(dataToSave, false); // false for RAB
+        if (newRab) {
+            setRabData(prev => [newRab, ...prev]);
+            toast.success('RAB baru dibuat & disimpan!');
+            addNotification({
+                text: `RAB baru "${newRab.projectName}" berhasil dibuat.`,
+                icon: 'Plus',
+                link: `/rab/detail/${newRab.id}`
+            });
+            navigate(`/rab/detail/${newRab.id}`);
+        } else {
+            toast.error('Gagal membuat RAB baru.');
+        }
+    }
+    setIsModalOpen(false);
+    setEditingRab(null);
   };
 
   const handleMoveRow = useCallback((viewIndex: number, direction: 'up' | 'down') => {

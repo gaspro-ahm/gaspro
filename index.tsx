@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { UserProvider } from './contexts/UserContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { LogProvider } from './contexts/LogContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -20,7 +21,9 @@ root.render(
         <LogProvider>
           <UserProvider>
             <AuthProvider>
-              <App />
+              <NotificationProvider>
+                <App />
+              </NotificationProvider>
             </AuthProvider>
           </UserProvider>
         </LogProvider>

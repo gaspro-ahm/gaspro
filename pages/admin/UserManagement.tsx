@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useContext } from 'react';
 import { Search, Plus, MoreVertical, Trash2, Edit } from 'lucide-react';
 import { type User } from '../../types';
@@ -53,10 +54,10 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveUser = async (data: Omit<User, 'id' | 'lastLogin'> & { id?: string }) => {
+  const handleSaveUser = (data: Omit<User, 'id' | 'lastLogin'> & { id?: string }) => {
     try {
         if (data.id) { // Update
-            const success = await updateUser(data.id, data);
+            const success = updateUser(data.id, data);
             if(success) {
                 setUsers(prev => prev.map(u => (u.id === data.id ? { ...u, ...data } : u)));
                 addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_UPDATED', details: `User '${data.name}' (ID: ${data.id}) was updated.` });
@@ -65,7 +66,7 @@ const UserManagement = () => {
                  toast.error('Gagal memperbarui pengguna.');
             }
         } else { // Create
-            const newUser = await createUser(data);
+            const newUser = createUser(data);
             if(newUser) {
                 setUsers(prev => [...prev, newUser]);
                 addLog({ level: 'INFO', user: currentUser!.name, action: 'USER_CREATED', details: `New user '${data.name}' was created.` });
@@ -75,7 +76,7 @@ const UserManagement = () => {
             }
         }
     } catch (error) {
-        toast.error('Terjadi kesalahan pada database.');
+        toast.error('Terjadi kesalahan pada penyimpanan lokal.');
         console.error(error);
     }
     setIsModalOpen(false);
@@ -86,10 +87,10 @@ const UserManagement = () => {
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (userToDelete) {
       const user = users.find(u => u.id === userToDelete);
-      const success = await deleteUser(userToDelete);
+      const success = deleteUser(userToDelete);
       if (success) {
         setUsers(prev => prev.filter(u => u.id !== userToDelete));
         if (user) {

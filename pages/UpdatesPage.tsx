@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { type Post } from '../types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
-import { sql } from '../services/db'; // Use the centralized db connection
+import { fetchPosts } from '../services/db';
 
 const UpdatesPage = () => {
     const [posts, setPosts] = useState<Post[]>([]);
@@ -10,20 +11,23 @@ const UpdatesPage = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchPosts = async () => {
+        const loadPosts = () => {
             try {
                 setLoading(true);
                 setError(null);
-                const result = await sql`SELECT id, title, content, author, created_at FROM posts ORDER BY created_at DESC`;
-                setPosts(result as unknown as Post[]);
+                // Simulate a short delay to show loading state, as localStorage is instant
+                setTimeout(() => {
+                    const fetchedPosts = fetchPosts();
+                    setPosts(fetchedPosts);
+                    setLoading(false);
+                }, 300);
             } catch (err) {
-                console.error("Database fetch error:", err);
-                setError("Gagal memuat update dari database. Silakan coba lagi nanti.");
-            } finally {
+                console.error("Local storage fetch error:", err);
+                setError("Gagal memuat update dari penyimpanan lokal.");
                 setLoading(false);
             }
         };
-        fetchPosts();
+        loadPosts();
     }, []);
 
     const PostCardSkeleton = () => (

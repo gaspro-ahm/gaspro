@@ -1,4 +1,9 @@
 
+
+
+
+
+
 import React, { useState, useContext, useEffect } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import Header from './components/Header';
@@ -35,11 +40,12 @@ import SettingsPage from './pages/SettingsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthContext } from './contexts/AuthContext';
 import { type RabDocument, type Project, type PriceDatabaseItem, type WorkItem } from './types';
-import { initializeDatabase, fetchData, initialData } from './services/db';
+import { initializeDatabase, fetchData, initialData, saveAllDataToDb } from './services/db';
 import { Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 
-const MainLayout = ({ notifications, setNotifications }: { notifications: any[], setNotifications: React.Dispatch<React.SetStateAction<any[]>> }) => {
+const MainLayout = () => {
   const { currentUser } = useContext(AuthContext);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -51,7 +57,7 @@ const MainLayout = ({ notifications, setNotifications }: { notifications: any[],
     <div className="min-h-screen bg-background text-foreground">
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <div className="lg:pl-64 flex flex-col flex-1">
-        <Header onMenuClick={() => setSidebarOpen(true)} notifications={notifications} setNotifications={setNotifications} />
+        <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <ReactRouterDOM.Outlet />
         </main>
@@ -70,18 +76,9 @@ const App = () => {
   const [priceCategories, setPriceCategories] = useState<string[]>([]);
   const [workCategories, setWorkCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: 'Status RAB #RAB005 diperbarui menjadi Diterima.', time: '5 menit lalu', read: false, icon: 'CheckCircle', link: '/rab/detail/5' },
-    { id: 2, text: 'Proyek "Website E-commerce Klien A" mendekati tenggat waktu.', time: '2 jam lalu', read: false, icon: 'Clock', link: '/project/detail/PROJ001' },
-    { id: 3, text: 'Komentar baru pada Laporan Proyek "Pembangunan Kantor Cabang".', time: '1 hari lalu', read: true, icon: 'MessageSquare', link: '/project/detail/PROJ004' },
-    { id: 4, text: 'Pemeliharaan sistem dijadwalkan malam ini pukul 23:00.', time: '2 hari lalu', read: true, icon: 'Server', link: '#' },
-    { id: 5, text: 'Database harga material berhasil diimpor.', time: '3 hari lalu', read: true, icon: 'CheckCircle', link: '/rab/database'},
-    { id: 6, text: 'Tugas baru ditambahkan ke Proyek "Migrasi Sistem Gudang".', time: '3 hari lalu', read: true, icon: 'MessageSquare', link: '/project/detail/PROJ003'},
-  ]);
   
   const fetchAllData = async () => {
-    const data = await fetchData();
+    const data = fetchData();
     setProjects(data.projects);
     setRabData(data.rabData);
     setBqData(data.bqData);
@@ -91,18 +88,31 @@ const App = () => {
     setWorkCategories(data.workCategories);
   };
 
+  const handleSaveAllData = async () => {
+    const success = saveAllDataToDb({
+      projects,
+      rabData,
+      bqData,
+      priceDatabase,
+      workItems,
+    });
+    if (success) {
+      toast.success('Semua data berhasil disimpan!');
+    } else {
+      toast.error('Gagal menyimpan data.');
+    }
+    return success;
+  };
+
   useEffect(() => {
-    const init = async () => {
+    const init = () => {
       setIsLoading(true);
-      await initializeDatabase();
-      await fetchAllData();
+      initializeDatabase();
+      fetchAllData();
       setIsLoading(false);
     };
     init();
 
-    const pollInterval = setInterval(fetchAllData, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(pollInterval);
   }, []);
 
   if (isLoading) {
@@ -110,7 +120,7 @@ const App = () => {
       <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="animate-spin text-primary" size={48} />
-          <p className="text-lg font-semibold">Memuat data dari database...</p>
+          <p className="text-lg font-semibold">Memuat data...</p>
         </div>
       </div>
     );
@@ -122,10 +132,10 @@ const App = () => {
        <ReactRouterDOM.Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
       {/* Routes with the main header and layout */}
-      <ReactRouterDOM.Route element={<MainLayout notifications={notifications} setNotifications={setNotifications} />}>
+      <ReactRouterDOM.Route element={<MainLayout />}>
         <ReactRouterDOM.Route path="/" element={<ReactRouterDOM.Navigate replace to="/dashboard" />} />
         <ReactRouterDOM.Route path="/dashboard" element={<Dashboard projects={projects} rabData={rabData} bqData={bqData} />} />
-        <ReactRouterDOM.Route path="/notifications" element={<NotificationsPage notifications={notifications} setNotifications={setNotifications} />} />
+        <ReactRouterDOM.Route path="/notifications" element={<NotificationsPage />} />
         <ReactRouterDOM.Route path="/profile" element={<ProfilePage />} />
         <ReactRouterDOM.Route path="/settings" element={<SettingsPage />} />
         
@@ -175,6 +185,10 @@ const App = () => {
                 setPriceDatabase={setPriceDatabase}
                 setWorkItems={setWorkItems}
                 initialData={initialData}
+                // FIX: Made fetchAllData async to match the expected Promise<void> return type.
+                fetchAllData={fetchAllData}
+                // FIX: Made handleSaveAllData async to match the expected Promise<boolean> return type.
+                handleSaveAllData={handleSaveAllData}
               />
             </ProtectedRoute>
           }

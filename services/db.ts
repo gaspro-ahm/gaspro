@@ -1,21 +1,25 @@
-// A WARNING:
-// This file contains a database connection string with credentials.
-// In a real-world production application, this is a MAJOR SECURITY RISK.
-// Backend APIs should always be used to interact with a database, never directly from the client.
-// This implementation is for demonstration purposes only, to fulfill the prompt's requirements
-// within a client-side-only framework.
+// This file now uses localStorage for all data persistence, removing the need for
+// an external database connection and resolving all associated errors. This provides
+// a faster, more stable, and offline-capable experience for the application.
 
-import { neon } from '@neondatabase/serverless';
 import { 
     type User, type Project, type RabDocument, type PriceDatabaseItem, 
-    type WorkItem, type LogEntry, type Post, type PermissionId
+    type WorkItem, type Post, type PermissionId
 } from '../types';
 
-const connectionString = 'postgresql://neondb_owner:npg_ZhCoMen1v9Rx@ep-twilight-pond-a1ybu7fd-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+// --- LOCAL STORAGE KEYS ---
+const LS_KEYS = {
+    PROJECTS: 'gaspro_projects',
+    RAB_DATA: 'gaspro_rabData',
+    BQ_DATA: 'gaspro_bqData',
+    PRICE_DB: 'gaspro_priceDatabase',
+    WORK_ITEMS: 'gaspro_workItems',
+    USERS: 'gaspro_users',
+    LOGS: 'gaspro_logs',
+    POSTS: 'gaspro_posts',
+};
 
-export const sql = neon(connectionString);
-
-// --- INITIAL DATA (for first-time setup) ---
+// --- INITIAL DATA (for first-time setup or reset) ---
 const allPermissions: PermissionId[] = [
     'bq:view', 'bq:create', 'bq:edit', 'bq:delete', 'bq:approve',
     'rab:view', 'rab:create', 'rab:edit', 'rab:delete', 'rab:approve',
@@ -28,7 +32,6 @@ const initialUsers: User[] = [
   { id: 'usr-2', username: 'bambang.obm', name: 'Bambang OBM', email: 'obm@proyekku.com', role: 'OBM', lastLogin: '2024-07-19T14:30:00Z', status: 'Active', password: 'password', photoUrl: 'https://i.pravatar.cc/150?u=obm@proyekku.com', permissions: ['proyek:view'], plant: ['Sunter'] },
   { id: 'usr-3', username: 'gatot.proyek', name: 'Gatot Proyek', email: 'gas.project@proyekku.com', role: 'GAS Project', lastLogin: '2024-07-18T09:00:00Z', status: 'Active', password: 'password', photoUrl: 'https://i.pravatar.cc/150?u=gas.project@proyekku.com', permissions: ['bq:view', 'bq:create', 'bq:edit', 'rab:view', 'rab:create', 'rab:edit', 'proyek:view', 'proyek:edit', 'database:view'], plant: ['Cikarang P3', 'Karawang P4'] },
 ];
-
 const initialRabData: RabDocument[] = [
   { id: 'rab-init-1', eMPR: 'RAB001', projectName: 'Pembangunan Kantor Cabang Utama di Jakarta Selatan', pic: 'Andi', surveyDate: '2023-05-10', receivedDate: '2023-05-15', finishDate: '2024-01-10', status: 'Selesai', tenderValue: 1200000000, keterangan: 'Selesai lebih cepat dari jadwal.', sla: 0, pdfReady: true, creatorName: 'Admin', approverName: 'Manajer', workDuration: 180, isLocked: true,
     detailItems: [
@@ -37,7 +40,6 @@ const initialRabData: RabDocument[] = [
   ] },
 ];
 const initialBqData: RabDocument[] = JSON.parse(JSON.stringify(initialRabData)).map((item: RabDocument, index: number) => ({...item, id: `bq-init-${index+1}`, eMPR: item.eMPR.replace('RAB', 'BQ')}));
-
 const initialProjects: Project[] = [
     { id: 'proj-init-1', name: 'Website E-commerce Klien A', team: ['Andi', 'Budi', 'Citra'], status: 'In Progress', dueDate: '2024-09-30', progress: 75, group: 'Pengembangan IT', description: 'Proyek e-commerce B2C.', phases: [] }
 ];
@@ -48,261 +50,153 @@ const initialPriceDatabase: PriceDatabaseItem[] = [
 const initialWorkItems: WorkItem[] = [
     { id: 'wi-init-1', name: 'Pembersihan Lokasi dan Pematokan', category: 'Sipil', unit: 'Ls', defaultPrice: 5000000, source: 'AHS', lastUpdated: new Date().toISOString(), defaultAhs: [] }
 ];
+const initialPosts: Post[] = [
+    { id: 1, title: 'Selamat Datang di GAS Pro!', content: 'Ini adalah platform baru untuk manajemen proyek yang lebih baik. Jelajahi fitur-fitur yang ada.', author: 'Admin Utama', created_at: new Date().toISOString() },
+];
 
-export const initialData = { initialUsers, initialProjects, initialRabData, initialBqData, initialPriceDatabase, initialWorkItems };
+export const initialData = { initialUsers, initialProjects, initialRabData, initialBqData, initialPriceDatabase, initialWorkItems, initialPosts };
 
-// --- DATABASE INITIALIZATION ---
-
-export async function initializeDatabase() {
+// --- HELPER FUNCTIONS ---
+function getItem<T>(key: string, fallback: T): T {
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS users (
-        id VARCHAR(255) PRIMARY KEY,
-        username VARCHAR(255) UNIQUE NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        role VARCHAR(50) NOT NULL,
-        "lastLogin" TIMESTAMPTZ,
-        status VARCHAR(50) NOT NULL,
-        password VARCHAR(255),
-        "photoUrl" TEXT,
-        permissions TEXT,
-        plant TEXT
-      );
-    `;
-    
-    await sql`
-      CREATE TABLE IF NOT EXISTS projects (
-        id VARCHAR(255) PRIMARY KEY,
-        name TEXT NOT NULL,
-        team TEXT,
-        status VARCHAR(50),
-        "dueDate" DATE,
-        progress INTEGER,
-        phases JSONB,
-        "group" VARCHAR(255),
-        description TEXT,
-        "finishDate" DATE
-      );
-    `;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS documents (
-        id VARCHAR(255) PRIMARY KEY,
-        is_bq BOOLEAN NOT NULL,
-        "eMPR" VARCHAR(255),
-        "projectName" TEXT,
-        pic VARCHAR(255),
-        "surveyDate" DATE,
-        "receivedDate" DATE,
-        "finishDate" DATE,
-        status VARCHAR(50),
-        sla INTEGER,
-        "tenderValue" BIGINT,
-        keterangan TEXT,
-        "detailItems" JSONB,
-        "pdfReady" BOOLEAN,
-        "creatorName" VARCHAR(255),
-        "approverName" VARCHAR(255),
-        "workDuration" INTEGER,
-        "revisionText" VARCHAR(255),
-        "isLocked" BOOLEAN,
-        "revisionHistory" JSONB,
-        "approvalRequestDetails" JSONB
-      );
-    `;
-
-    await sql`
-      CREATE TABLE IF NOT EXISTS price_database (
-        id VARCHAR(255) PRIMARY KEY,
-        category VARCHAR(255),
-        "itemName" TEXT NOT NULL,
-        unit VARCHAR(50),
-        "unitPrice" BIGINT,
-        "priceSource" VARCHAR(255),
-        "lastUpdated" TIMESTAMPTZ
-      );
-    `;
-
-    await sql`
-      CREATE TABLE IF NOT EXISTS work_items (
-        id VARCHAR(255) PRIMARY KEY,
-        name TEXT NOT NULL,
-        category VARCHAR(255),
-        unit VARCHAR(50),
-        "defaultPrice" BIGINT,
-        source VARCHAR(50),
-        "lastUpdated" TIMESTAMPTZ,
-        "defaultAhs" JSONB
-      );
-    `;
-
-    await sql`
-      CREATE TABLE IF NOT EXISTS posts (
-          id SERIAL PRIMARY KEY,
-          title VARCHAR(255) NOT NULL,
-          content TEXT NOT NULL,
-          author VARCHAR(255) NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
-
-    // Seed initial data if tables are empty
-    const userCount = await sql`SELECT COUNT(*) FROM users`;
-    if (userCount[0].count === '0') {
-      for (const user of initialUsers) { await createUser(user); }
-    }
-    
-    const projectCount = await sql`SELECT COUNT(*) FROM projects`;
-    if (projectCount[0].count === '0') {
-        for (const project of initialProjects) {
-            await sql`
-                INSERT INTO projects (id, name, team, status, "dueDate", progress, phases, "group", description, "finishDate")
-                VALUES (${project.id}, ${project.name}, ${project.team.join(',')}, ${project.status}, ${project.dueDate}, ${project.progress}, ${project.phases ? JSON.stringify(project.phases) : null}, ${project.group}, ${project.description}, ${project.finishDate || null})
-            `;
-        }
-    }
-    
-    const docCount = await sql`SELECT COUNT(*) FROM documents`;
-    if (docCount[0].count === '0') {
-        for (const doc of initialRabData) {
-            await sql`INSERT INTO documents (id, is_bq, "eMPR", "projectName", pic, "surveyDate", "receivedDate", "finishDate", status, sla, "tenderValue", keterangan, "detailItems", "pdfReady", "creatorName", "approverName", "workDuration", "revisionText", "isLocked") VALUES (${doc.id}, false, ${doc.eMPR}, ${doc.projectName}, ${doc.pic}, ${doc.surveyDate}, ${doc.receivedDate}, ${doc.finishDate}, ${doc.status}, ${doc.sla}, ${doc.tenderValue}, ${doc.keterangan}, ${JSON.stringify(doc.detailItems)}, ${doc.pdfReady}, ${doc.creatorName}, ${doc.approverName}, ${doc.workDuration}, ${doc.revisionText}, ${doc.isLocked})`;
-        }
-        for (const doc of initialBqData) {
-            await sql`INSERT INTO documents (id, is_bq, "eMPR", "projectName", pic, "surveyDate", "receivedDate", "finishDate", status, sla, "tenderValue", keterangan, "detailItems", "pdfReady", "creatorName", "approverName", "workDuration", "revisionText", "isLocked") VALUES (${doc.id}, true, ${doc.eMPR}, ${doc.projectName}, ${doc.pic}, ${doc.surveyDate}, ${doc.receivedDate}, ${doc.finishDate}, ${doc.status}, ${doc.sla}, ${doc.tenderValue}, ${doc.keterangan}, ${JSON.stringify(doc.detailItems)}, ${doc.pdfReady}, ${doc.creatorName}, ${doc.approverName}, ${doc.workDuration}, ${doc.revisionText}, ${doc.isLocked})`;
-        }
-    }
-    
-    const priceDbCount = await sql`SELECT COUNT(*) FROM price_database`;
-    if (priceDbCount[0].count === '0') {
-        for (const item of initialPriceDatabase) {
-            await sql`INSERT INTO price_database (id, category, "itemName", unit, "unitPrice", "priceSource", "lastUpdated") VALUES (${item.id}, ${item.category}, ${item.itemName}, ${item.unit}, ${item.unitPrice}, ${item.priceSource}, ${item.lastUpdated})`;
-        }
-    }
-    
-    const workItemCount = await sql`SELECT COUNT(*) FROM work_items`;
-    if (workItemCount[0].count === '0') {
-        for (const item of initialWorkItems) {
-            await sql`INSERT INTO work_items (id, name, category, unit, "defaultPrice", source, "lastUpdated", "defaultAhs") VALUES (${item.id}, ${item.name}, ${item.category}, ${item.unit}, ${item.defaultPrice}, ${item.source}, ${item.lastUpdated}, ${JSON.stringify(item.defaultAhs || [])})`;
-        }
-    }
-
+function setItem<T>(key: string, value: T) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error("Database initialization failed:", error);
+    console.error(`Error saving to localStorage [${key}]:`, error);
+  }
+}
+
+// --- DATABASE INITIALIZATION (now for localStorage) ---
+export function initializeDatabase() {
+  if (!localStorage.getItem(LS_KEYS.USERS)) {
+    setItem(LS_KEYS.USERS, initialData.initialUsers);
+    setItem(LS_KEYS.PROJECTS, initialData.initialProjects);
+    setItem(LS_KEYS.RAB_DATA, initialData.initialRabData);
+    setItem(LS_KEYS.BQ_DATA, initialData.initialBqData);
+    setItem(LS_KEYS.PRICE_DB, initialData.initialPriceDatabase);
+    setItem(LS_KEYS.WORK_ITEMS, initialData.initialWorkItems);
+    setItem(LS_KEYS.POSTS, initialData.initialPosts);
   }
 }
 
 // --- DATA FETCHING ---
+export function fetchData() {
+    const projects = getItem(LS_KEYS.PROJECTS, initialData.initialProjects);
+    const rabData = getItem(LS_KEYS.RAB_DATA, initialData.initialRabData);
+    const bqData = getItem(LS_KEYS.BQ_DATA, initialData.initialBqData);
+    const priceDatabase = getItem(LS_KEYS.PRICE_DB, initialData.initialPriceDatabase);
+    const workItems = getItem(LS_KEYS.WORK_ITEMS, initialData.initialWorkItems);
+    
+    const priceCategories = [...new Set(priceDatabase.map(item => item.category))];
+    const workCategories = [...new Set(workItems.map(item => item.category))];
 
-export async function fetchData() {
-    try {
-        const [projectsRes, documentsRes, priceDatabaseRes, workItemsRes] = await Promise.all([
-            sql`SELECT * FROM projects`,
-            sql`SELECT * FROM documents`,
-            sql`SELECT * FROM price_database`,
-            sql`SELECT * FROM work_items`
-        ]);
-
-        const projects: Project[] = projectsRes.map((p: any) => ({
-            ...p,
-            team: p.team ? p.team.split(',') : [],
-            phases: p.phases || [],
-        }));
-        
-        const documents: any[] = documentsRes;
-
-        const rabData: RabDocument[] = documents
-            .filter(d => !d.is_bq)
-            .map(d => ({
-                ...d,
-                is_bq: undefined,
-                detailItems: d.detailItems || [],
-                revisionHistory: d.revisionHistory || [],
-                approvalRequestDetails: d.approvalRequestDetails || null,
-            }));
-        
-        const bqData: RabDocument[] = documents
-            .filter(d => d.is_bq)
-            .map(d => ({
-                ...d,
-                is_bq: undefined,
-                detailItems: d.detailItems || [],
-                revisionHistory: d.revisionHistory || [],
-                approvalRequestDetails: d.approvalRequestDetails || null,
-            }));
-        
-        const workItems: WorkItem[] = workItemsRes.map((w: any) => ({
-            ...w,
-            defaultAhs: w.defaultAhs || [],
-        }));
-
-        const priceDatabase: PriceDatabaseItem[] = priceDatabaseRes as any;
-        
-        const priceCategories = [...new Set(priceDatabase.map(item => item.category))];
-        const workCategories = [...new Set(workItems.map(item => item.category))];
-
-        return { projects, rabData, bqData, priceDatabase, workItems, priceCategories, workCategories };
-    } catch (error) {
-        console.error("Failed to fetch data:", error);
-        // Return empty arrays as a fallback to prevent the app from crashing
-        return {
-            projects: [], rabData: [], bqData: [], priceDatabase: [], workItems: [], priceCategories: [], workCategories: []
-        };
-    }
+    return { projects, rabData, bqData, priceDatabase, workItems, priceCategories, workCategories };
 }
 
+export function fetchPosts(): Post[] {
+    return getItem(LS_KEYS.POSTS, initialData.initialPosts);
+}
 
 // --- DATA MUTATION ---
 
+// DOCUMENT (RAB/BQ)
+export function createDocument(data: Omit<RabDocument, 'id' | 'sla' | 'detailItems' | 'pdfReady'>, is_bq: boolean): RabDocument {
+    const key = is_bq ? LS_KEYS.BQ_DATA : LS_KEYS.RAB_DATA;
+    const docs = getItem<RabDocument[]>(key, []);
+    const newDoc: RabDocument = { 
+        ...data, 
+        id: `${is_bq ? 'bq' : 'rab'}-${Date.now()}`,
+        sla: 0,
+        detailItems: [],
+        pdfReady: false,
+    };
+    setItem(key, [...docs, newDoc]);
+    return newDoc;
+}
+
+export function updateDocument(id: string, data: Partial<RabDocument>): boolean {
+    const isBq = id.startsWith('bq-');
+    const key = isBq ? LS_KEYS.BQ_DATA : LS_KEYS.RAB_DATA;
+    const docs = getItem<RabDocument[]>(key, []);
+    const docIndex = docs.findIndex(d => d.id === id);
+
+    if (docIndex !== -1) {
+        docs[docIndex] = { ...docs[docIndex], ...data };
+        setItem(key, docs);
+        return true;
+    }
+    return false;
+}
+
+export function deleteDocument(id: string): boolean {
+    const isBq = id.startsWith('bq-');
+    const key = isBq ? LS_KEYS.BQ_DATA : LS_KEYS.RAB_DATA;
+    const docs = getItem<RabDocument[]>(key, []);
+    const newDocs = docs.filter(d => d.id !== id);
+
+    if (newDocs.length < docs.length) {
+        setItem(key, newDocs);
+        return true;
+    }
+    return false;
+}
+
 // USER
-export async function createUser(data: Omit<User, 'id' | 'lastLogin'>): Promise<User | null> {
+export function createUser(data: Omit<User, 'id' | 'lastLogin'>): User {
+    const users = getItem<User[]>(LS_KEYS.USERS, []);
     const newUser: User = { ...data, id: `usr-${Date.now()}`, lastLogin: new Date().toISOString() };
-    const { permissions, plant, ...restOfUser } = newUser;
-    try {
-        await sql`
-            INSERT INTO users (id, username, name, email, role, "lastLogin", status, password, "photoUrl", permissions, plant)
-            VALUES (${newUser.id}, ${newUser.username}, ${newUser.name}, ${newUser.email}, ${newUser.role}, ${newUser.lastLogin}, ${newUser.status}, ${newUser.password}, ${newUser.photoUrl}, ${permissions.join(',')}, ${plant.join(',')})
-        `;
-        return newUser;
-    } catch (error) {
-        console.error("DB Create User Error:", error);
-        return null;
-    }
+    setItem(LS_KEYS.USERS, [...users, newUser]);
+    return newUser;
 }
 
-export async function updateUser(id: string, data: Partial<User>): Promise<boolean> {
-    try {
-        const updates: Record<string, any> = {};
-        if (data.username !== undefined) updates.username = data.username;
-        if (data.name !== undefined) updates.name = data.name;
-        if (data.email !== undefined) updates.email = data.email;
-        if (data.role !== undefined) updates.role = data.role;
-        if (data.lastLogin !== undefined) updates.lastLogin = data.lastLogin;
-        if (data.status !== undefined) updates.status = data.status;
-        if (data.password && data.password.length > 0) updates.password = data.password;
-        if (data.photoUrl !== undefined) updates.photoUrl = data.photoUrl;
-        if (data.permissions !== undefined) updates.permissions = data.permissions.join(',');
-        if (data.plant !== undefined) updates.plant = data.plant.join(',');
+export function updateUser(id: string, data: Partial<User>): boolean {
+    const users = getItem<User[]>(LS_KEYS.USERS, []);
+    const userIndex = users.findIndex(u => u.id === id);
+    if (userIndex !== -1) {
+        users[userIndex] = { ...users[userIndex], ...data };
+        setItem(LS_KEYS.USERS, users);
+        return true;
+    }
+    return false;
+}
 
-        const keys = Object.keys(updates);
-        if (keys.length === 0) return true;
-        
-        // FIX: The `sql.join` helper was causing a type error.
-        // Replaced with the `sql(object, ...keys)` helper which is a cleaner and more robust way to handle dynamic SET clauses with the 'postgres.js' library.
-        await sql`UPDATE users SET ${sql(updates, ...keys)} WHERE id = ${id}`;
+export function deleteUser(id: string): boolean {
+    const users = getItem<User[]>(LS_KEYS.USERS, []);
+    const newUsers = users.filter(u => u.id !== id);
+    if (newUsers.length < users.length) {
+        setItem(LS_KEYS.USERS, newUsers);
+        return true;
+    }
+    return false;
+}
+
+// SAVE ALL DATA
+export function saveAllDataToDb(data: {
+    projects: Project[],
+    rabData: RabDocument[],
+    bqData: RabDocument[],
+    priceDatabase: PriceDatabaseItem[],
+    workItems: WorkItem[],
+}): boolean {
+    try {
+        setItem(LS_KEYS.PROJECTS, data.projects);
+        setItem(LS_KEYS.RAB_DATA, data.rabData);
+        setItem(LS_KEYS.BQ_DATA, data.bqData);
+        setItem(LS_KEYS.PRICE_DB, data.priceDatabase);
+        setItem(LS_KEYS.WORK_ITEMS, data.workItems);
         return true;
     } catch (error) {
-        console.error("DB Update User Error:", error);
+        console.error("Error saving all data to localStorage:", error);
         return false;
     }
 }
-
-export async function deleteUser(id: string): Promise<boolean> {
-    try {
-        await sql`DELETE FROM users WHERE id = ${id}`;
-        return true;
-    } catch (error) {
-        console.error("DB Delete User Error:", error);
-        return false;
-    }
-}
+// This function is no longer needed but kept for API compatibility with Admin page
+export const sql = {};

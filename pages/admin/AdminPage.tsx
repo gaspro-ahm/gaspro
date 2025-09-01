@@ -1,7 +1,7 @@
 import React, { useState, useContext, useMemo } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { type Project, type RabDocument, type PriceDatabaseItem, type WorkItem } from '../../types';
-import { Download, Upload, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
+import { Download, Upload, AlertTriangle, RefreshCw, Trash2, Save, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '../../components/ConfirmationModal';
@@ -45,17 +45,25 @@ const DataManagementCard = ({ title, onExportJson, onExportXlsx, onImportJson }:
 
 
 const AdminPage = () => {
-  const { projects, rabData, bqData, priceDatabase, workItems, setProjects, setRabData, setBqData, setPriceDatabase, setWorkItems, initialData } = ReactRouterDOM.useOutletContext<any>();
+  const { 
+    projects, rabData, bqData, priceDatabase, workItems, 
+    setProjects, setRabData, setBqData, setPriceDatabase, setWorkItems, 
+    initialData, fetchAllData, handleSaveAllData 
+  } = ReactRouterDOM.useOutletContext<any>();
   const { users, setUsers } = useContext(UserContext);
   const { logs, setLogs } = useContext(LogContext);
   
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isFormatConfirmOpen, setIsFormatConfirmOpen] = useState(false);
+  const [isSaveAllConfirmOpen, setIsSaveAllConfirmOpen] = useState(false);
   
   const [selectedData, setSelectedData] = useState<Record<string, boolean>>({
     proyek: false, rab: false, bq: false, dbHarga: false, dbPekerjaan: false, pengguna: false, log: false,
   });
   const [confirmAction, setConfirmAction] = useState<{type: 'format' | 'reset' | null}>({ type: null });
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const dataMap = useMemo(() => ({
     proyek: { name: 'Proyek', setter: setProjects, initial: initialData.initialProjects, formatValue: [] },
@@ -209,6 +217,30 @@ const AdminPage = () => {
     reader.readAsText(file);
   };
 
+  const handleRefreshClick = () => {
+    setIsRefreshing(true);
+    toast.promise(
+      new Promise(resolve => setTimeout(resolve, 500)),
+      {
+        loading: 'Menyegarkan data dari Local Storage...',
+        success: () => {
+          fetchAllData();
+          setIsRefreshing(false);
+          return 'Data berhasil disegarkan!';
+        },
+        error: 'Gagal menyegarkan data.'
+      }
+    );
+  };
+
+  const handleSaveAllClick = () => {
+    setIsSaveAllConfirmOpen(false);
+    setIsSaving(true);
+    const success = handleSaveAllData();
+    setIsSaving(false);
+    // The handleSaveAllData function already shows a toast on success/error
+  };
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       <ConfirmationModal 
@@ -232,6 +264,29 @@ const AdminPage = () => {
         title={`${confirmAction.type === 'format' ? 'Format' : 'Reset'} Data Terpilih`}
         message={`Anda yakin ingin ${confirmAction.type === 'format' ? 'menghapus' : 'mereset'} data berikut: ${getSelectedDataNames().join(', ')}? Tindakan ini tidak dapat dibatalkan.`}
       />
+      <ConfirmationModal 
+        isOpen={isSaveAllConfirmOpen}
+        onClose={() => setIsSaveAllConfirmOpen(false)}
+        onConfirm={handleSaveAllClick}
+        title="Simpan Semua Data ke Local Storage"
+        message="Tindakan ini akan menimpa semua data di Local Storage dengan data yang saat ini ada di aplikasi. Lanjutkan?"
+      />
+      
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border dark:border-gray-700">
+        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">Penyimpanan Lokal</h3>
+        <p className="text-sm text-muted-foreground mb-4">Gunakan tombol ini untuk menyegarkan data dari Local Storage atau menyimpan semua perubahan saat ini.</p>
+        <div className="flex flex-col sm:flex-row gap-3">
+           <button onClick={handleRefreshClick} disabled={isRefreshing} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400">
+                {isRefreshing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                {isRefreshing ? 'Menyegarkan...' : 'Muat Ulang dari Local Storage'}
+            </button>
+            <button onClick={() => setIsSaveAllConfirmOpen(true)} disabled={isSaving} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition disabled:bg-green-400">
+                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {isSaving ? 'Menyimpan...' : 'Simpan Semua Data ke Local Storage'}
+            </button>
+        </div>
+      </div>
+
 
       <DataManagementCard 
         title="Data Proyek"

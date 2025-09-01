@@ -2,15 +2,15 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
 import { 
   Bell, UserCircle, Sun, Moon, Shield, 
-  Settings, LogOut, User, CheckCircle, Clock, MessageSquare, Server, Menu 
+  Settings, LogOut, User, CheckCircle, Clock, MessageSquare, Server, Menu,
+  Trash2, Edit, Plus, Save, Send, Lock, TrendingUp
 } from 'lucide-react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { AuthContext } from '../contexts/AuthContext';
+import { NotificationContext } from '../contexts/NotificationContext';
 
 interface HeaderProps {
     onMenuClick: () => void;
-    notifications: any[];
-    setNotifications: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 const icons: { [key: string]: React.ReactElement } = {
@@ -18,11 +18,19 @@ const icons: { [key: string]: React.ReactElement } = {
   Clock: <Clock className="text-yellow-500" />,
   MessageSquare: <MessageSquare className="text-blue-500" />,
   Server: <Server className="text-muted-foreground" />,
+  Trash2: <Trash2 className="text-red-500" />,
+  Edit: <Edit className="text-blue-500" />,
+  Plus: <Plus className="text-green-500" />,
+  Save: <Save className="text-gray-500" />,
+  Send: <Send className="text-purple-500" />,
+  Lock: <Lock className="text-gray-600" />,
+  TrendingUp: <TrendingUp className="text-green-500" />,
 };
 
-const Header = ({ onMenuClick, notifications, setNotifications }: HeaderProps) => {
+const Header = ({ onMenuClick }: HeaderProps) => {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const { currentUser, logout } = useContext(AuthContext);
+  const { notifications, setNotifications, unreadCount } = useContext(NotificationContext);
   const navigate = ReactRouterDOM.useNavigate();
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -30,8 +38,6 @@ const Header = ({ onMenuClick, notifications, setNotifications }: HeaderProps) =
   const notificationsRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
